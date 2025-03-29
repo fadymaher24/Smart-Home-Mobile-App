@@ -23,6 +23,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3607ec62-7d2e-40c1-84fc-20430c0872d7"
+      }
+    },
+    "owner": "fady777"
   }
 }
