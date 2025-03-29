@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text } from "react-native";
+import { View, Text, Image } from "react-native";
 import { useState } from "react";
 import { useRef } from "react";
 import { ImageBackground } from "react-native";
@@ -11,10 +11,11 @@ function WelcomeScreen(props: React.PropsWithChildren<{}>) {
 			source={require("../assets/WelcomeScreen.png")}
 			style={styles.background}
 		>
+			<Image source={require("../assets/logo-smart.jpg")} />
 			<View style={styles.loginButton}>
 				<Text>Login</Text>
 			</View>
-			<View style={styles.loginButton}>
+			<View style={styles.registerButton}>
 				<Text>Register</Text>
 			</View>
 			<View style={styles.loginButton}>
@@ -41,6 +42,13 @@ const styles = StyleSheet.create({
 		padding: 10,
 		borderRadius: 5,
 		marginTop: 20,
+		width: "100%",
+		height: 70,
+		alignItems: "center",
+		justifyContent: "center",
+	},
+	registerButton: {
+		backgroundColor: "#4ECDC4",
 		width: "100%",
 		height: 70,
 		alignItems: "center",
