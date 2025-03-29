@@ -11,13 +11,17 @@ function WelcomeScreen(props: React.PropsWithChildren<{}>) {
 			source={require("../assets/WelcomeScreen.png")}
 			style={styles.background}
 		>
-			<View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-				<Text style={{ fontSize: 20, color: "white" }}>
-					Welcome to the App!
-				</Text>
-				<Text style={{ fontSize: 16, color: "white" }}>
-					This is a sample welcome screen.
-				</Text>
+			<View style={styles.loginButton}>
+				<Text>Login</Text>
+			</View>
+			<View style={styles.loginButton}>
+				<Text>Register</Text>
+			</View>
+			<View style={styles.loginButton}>
+				<Text>Forgot Password?</Text>
+			</View>
+			<View style={styles.loginButton}>
+				<Text>Continue as Guest</Text>
 			</View>
 		</ImageBackground>
 	);
@@ -29,6 +33,16 @@ const styles = StyleSheet.create({
 	background: {
 		flex: 1,
 		backgroundColor: "gainsboro",
+		alignItems: "center",
+		justifyContent: "flex-end",
+	},
+	loginButton: {
+		backgroundColor: "#fc5c65",
+		padding: 10,
+		borderRadius: 5,
+		marginTop: 20,
+		width: "100%",
+		height: 70,
 		alignItems: "center",
 		justifyContent: "center",
 	},
