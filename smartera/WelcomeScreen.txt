@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, Image, StyleSheet, TouchableOpacity } from "react-native";
-import colors from "../config/colors"; // Assuming you have a colors config file
+import colors from "./config/colors"; // Assuming you have a colors config file
 import { useNavigation } from "@react-navigation/native";
 
 function WelcomeScreen(props) {

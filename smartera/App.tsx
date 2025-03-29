@@ -1,26 +1,30 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import WelcomeScreen from "./app/screens/WelcomeScreen";
 import Navigator from "./routes/homestack";
 import * as Font from "expo-font";
 
-const getFonts = () => {
-	return Font.loadAsync({
-		"Roboto-Black": require("./assets/fonts/Roboto-Black.ttf"),
-		"Roboto-Bold": require("./assets/fonts/Roboto-Bold.ttf"),
-		"Roboto-Light": require("./assets/fonts/Roboto-Light.ttf"),
-		"Roboto-Medium": require("./assets/fonts/Roboto-Medium.ttf"),
-		"Roboto-Regular": require("./assets/fonts/Roboto-Regular.ttf"),
-	});
-};
 export default function App() {
-	const [fontsLoaded, setFontsLoaded] = React.useState(false);
-	React.useEffect(() => {
-		getFonts().then(() => setFontsLoaded(true));
+	const [fontsLoaded, setFontsLoaded] = useState(false);
+
+	useEffect(() => {
+		async function loadFonts() {
+			await Font.loadAsync({
+				"Roboto-Black": require("./app/assets/fonts/Roboto-Black.ttf"),
+				"Roboto-Bold": require("./app/assets/fonts/Roboto-Bold.ttf"),
+				"Roboto-Light": require("./app/assets/fonts/Roboto-Light.ttf"),
+				"Roboto-Medium": require("./app/assets/fonts/Roboto-Medium.ttf"),
+				"Roboto-Regular": require("./app/assets/fonts/Roboto-Regular.ttf"),
+			});
+			setFontsLoaded(true);
+		}
+		loadFonts();
 	}, []);
+
 	if (!fontsLoaded) {
 		return <WelcomeScreen />;
 	}
+
 	return <Navigator />;
 }
 
