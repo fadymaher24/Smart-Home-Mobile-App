@@ -30,6 +30,7 @@ function WelcomeScreen(props: React.PropsWithChildren<{}>) {
 			<View style={styles.loginButton}>
 				<Text style={styles.Text} >Login</Text>
 				
+				
 			</View>
 			<View style={styles.registerButton}>
 				<Text style={styles.Text}>Register</Text>
