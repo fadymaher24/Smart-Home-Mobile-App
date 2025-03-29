@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRef } from "react";
 import { ImageBackground } from "react-native";
 import { StyleSheet } from "react-native";
+import colors from "../config/colors";
 
 function WelcomeScreen(props: React.PropsWithChildren<{}>) {
 	return (
@@ -11,7 +12,8 @@ function WelcomeScreen(props: React.PropsWithChildren<{}>) {
 			source={require("../assets/WelcomeScreen.png")}
 			style={styles.background}
 		>
-			<Image source={require("../assets/logo-smart.jpg")} />
+			<Image source={require("../assets/logo-smart.png")} style={styles.logo} />
+
 			<View style={styles.loginButton}>
 				<Text>Login</Text>
 			</View>
@@ -33,9 +35,19 @@ export default WelcomeScreen;
 const styles = StyleSheet.create({
 	background: {
 		flex: 1,
-		backgroundColor: "gainsboro",
+		backgroundColor: colors.primary,
 		alignItems: "center",
 		justifyContent: "flex-end",
+	},
+	logo: {
+		width: 50,
+		height: 50,
+		position: "absolute",
+		top: 70,
+		left: 190,
+		alignItems: "center",
+		borderRadius: 50,
+		justifyContent: "center",
 	},
 	loginButton: {
 		backgroundColor: "#fc5c65",
