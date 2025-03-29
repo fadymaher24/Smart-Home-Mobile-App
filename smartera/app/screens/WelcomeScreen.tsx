@@ -18,7 +18,7 @@ function WelcomeScreen(props: React.PropsWithChildren<{}>) {
 				style={{
 					fontSize: 30,
 					fontWeight: "bold",
-					color: colors.black,
+					color: colors.white,
 					position: "absolute",
 					top: 200,
 				}}
@@ -26,17 +26,16 @@ function WelcomeScreen(props: React.PropsWithChildren<{}>) {
 				Welcome to Smart Home
 			</Text>
 			<View style={styles.loginButton}>
-				<Text>Login</Text>
+				<Text style={styles.Text}>Login</Text>
 			</View>
 			<View style={styles.registerButton}>
-				<Text>Register</Text>
+				<Text style={styles.Text}>Register</Text>
 			</View>
-			<View style={styles.button}>
-				<Text>Login with Google</Text>
-				<Text>Forgot Password?</Text>
+			<View style={styles.forgotPasswordButton}>
+				<Text style={styles.Text}>Forgot Password?</Text>
 			</View>
-			<View style={styles.button}>
-				<Text>Continue as Guest</Text>
+			<View style={styles.guestButton}>
+				<Text style={styles.Text}>Continue as Guest</Text>
 			</View>
 		</View>
 		// </ImageBackground>
@@ -47,75 +46,119 @@ export default WelcomeScreen;
 
 const styles = StyleSheet.create({
 	background: {
-		flex: 1,
-		// backgroundColor: colors.white,
+		flex: 10,
 		alignItems: "center",
 		justifyContent: "flex-end",
 		backgroundColor:
-			"linear-gradient(45deg,rgb(51, 0, 172),rgb(255, 255, 255))", // Cool gradient background
+			"linear-gradient(45deg, rgb(0, 0, 102), rgb(0, 51, 153), rgb(0, 102, 204))", // Dark blue gradient
 	},
 	logo: {
 		width: 50,
 		height: 50,
-		position: "absolute",
-		top: 70,
-		left: 190,
+		// // position: "absolute",
+		// top: 70,
+		// left: 190,
 		alignItems: "center",
 		borderRadius: 50,
 		justifyContent: "center",
+		marginBottom: 200,
 	},
 	loginButton: {
-		backgroundColor: "#fc5c65",
+		backgroundColor: "#003366", // Dark blue shade
 		fontSize: 30,
 		fontWeight: "bold",
-		color: colors.black,
+		color: "#ffffff", // White text
 		alignItems: "center",
 		justifyContent: "center",
 		textAlign: "center",
 		borderRadius: 50,
 		padding: 20,
-		borderColor: colors.black,
+		borderColor: "#ffffff", // White border
 		elevation: 20,
-		shadowColor: colors.black,
+		shadowColor: "#000000", // Black shadow
 		shadowOffset: { width: 2, height: 4 },
 		shadowOpacity: 0.8,
 		width: 200,
-		marginBottom: 90,
+		marginBottom: 20,
 	},
 	registerButton: {
-		backgroundColor: "#4ECDC4",
+		backgroundColor: "#004080", // Slightly lighter blue
 		fontSize: 30,
 		fontWeight: "bold",
-		color: colors.black,
+		color: "#ffffff", // White text
 		alignItems: "center",
 		justifyContent: "center",
 		textAlign: "center",
 		borderRadius: 50,
 		padding: 20,
-		borderColor: colors.black,
+		borderColor: "#ffffff", // White border
 		elevation: 20,
-		shadowColor: colors.black,
+		shadowColor: "#000000", // Black shadow
 		shadowOffset: { width: 2, height: 4 },
 		shadowOpacity: 0.8,
 		width: 200,
-		marginBottom: 90,
+		marginBottom: 20,
+	},
+	forgotPasswordButton: {
+		backgroundColor: "#0059b3", // Medium blue
+		fontSize: 20,
+		fontWeight: "bold",
+		color: "#ffffff", // White text
+		alignItems: "center",
+		justifyContent: "center",
+		textAlign: "center",
+		borderRadius: 50,
+		padding: 20,
+		borderColor: "#ffffff", // White border
+		elevation: 20,
+		shadowColor: "#000000", // Black shadow
+		shadowOffset: { width: 2, height: 4 },
+		shadowOpacity: 0.8,
+		width: 200,
+		marginBottom: 20,
+	},
+	guestButton: {
+		backgroundColor: "#0066cc", // Light blue
+		fontSize: 20,
+		fontWeight: "bold",
+		color: "#ffffff", // White text
+		alignItems: "center",
+		justifyContent: "center",
+		textAlign: "center",
+		borderRadius: 50,
+		padding: 20,
+		borderColor: "#ffffff", // White border
+		elevation: 20,
+		shadowColor: "#000000", // Black shadow
+		shadowOffset: { width: 2, height: 4 },
+		shadowOpacity: 0.8,
+		width: 200,
+		marginBottom: 200,
 	},
 	button: {
-		fontSize: 30,
+		fontSize: 20,
 		fontWeight: "bold",
-		color: colors.black,
+		color: "#ffffff", // White text
 		alignItems: "center",
 		justifyContent: "center",
 		textAlign: "center",
 		borderRadius: 50,
-		backgroundColor: colors.primary,
+		backgroundColor: "#0059b3", // Medium blue
 		padding: 20,
-		borderColor: colors.black,
+		borderColor: "#ffffff", // White border
 		elevation: 20,
-		shadowColor: colors.black,
+		shadowColor: "#000000", // Black shadow
 		shadowOffset: { width: 2, height: 4 },
 		shadowOpacity: 0.8,
 		width: 200,
-		marginBottom: 90,
+		marginBottom: 20,
+	},
+	Text: {
+		fontSize: 20,
+		fontWeight: "bold",
+		color: "#ffffff", // White text
+		alignItems: "center",
+		justifyContent: "center",
+		textAlign: "center",
 	},
 });
