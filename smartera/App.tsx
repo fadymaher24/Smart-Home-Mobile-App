@@ -1,17 +1,10 @@
 import React from "react";
-import { StatusBar } from "expo-status-bar";
 import { StyleSheet, Text, View } from "react-native";
 
-export default function App() {
-	let x = 1;
-	console.log("App executed");
+import WelcomeScreen from "./app/screens/WelcomeScreen";
 
-	return (
-		<View style={styles.container}>
-			<Text>Hello Halzem</Text>
-			<StatusBar style="auto" />
-		</View>
-	);
+export default function App() {
+	return <WelcomeScreen />;
 }
 
 const styles = StyleSheet.create({

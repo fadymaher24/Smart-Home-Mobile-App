@@ -5,7 +5,7 @@ import { useRef } from "react";
 import { ImageBackground } from "react-native";
 import { StyleSheet } from "react-native";
 
-function welcomescreen(props: React.PropsWithChildren<{}>) {
+function WelcomeScreen(props: React.PropsWithChildren<{}>) {
 	return (
 		<ImageBackground
 			source={require("../assets/welcomescreen.png")}
@@ -23,7 +23,7 @@ function welcomescreen(props: React.PropsWithChildren<{}>) {
 	);
 }
 
-export default welcomescreen;
+export default WelcomeScreen;
 
 const styles = StyleSheet.create({
 	background: {
