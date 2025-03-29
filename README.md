@@ -52,6 +52,31 @@ Smart-Home-Mobile-App is a React Native application designed to control and moni
    expo start
    ```
 
+## Backend Setup
+
+The backend logic for the MQTT server is located in the `smartera/backend` folder.
+
+### Steps
+
+1. Navigate to the backend folder:
+
+   ```bash
+   cd smartera/backend
+   ```
+
+2. Install the required dependencies:
+
+   ```bash
+   npm install mqtt
+   ```
+
+3. Start the MQTT server:
+   ```bash
+   node mqttServer.js
+   ```
+
+The MQTT server will connect to the broker and listen for messages on the `smarthome/devices/#` topic.
+
 ## Folder Structure
 
 ```
