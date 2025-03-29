@@ -8,7 +8,7 @@ import { StyleSheet } from "react-native";
 function WelcomeScreen(props: React.PropsWithChildren<{}>) {
 	return (
 		<ImageBackground
-			source={require("../assets/welcomescreen.png")}
+			source={require("../assets/WelcomeScreen.png")}
 			style={styles.background}
 		>
 			<View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>

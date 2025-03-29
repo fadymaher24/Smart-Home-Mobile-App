@@ -1,34 +1,40 @@
 {
-	"expo": {
-		"name": "smartera",
-		"slug": "smartera",
-		"version": "1.0.0",
-		"orientation": "portrait",
-		"icon": "./app/assets/icon.png",
-		"userInterfaceStyle": "light",
-		"newArchEnabled": true,
-		"splash": {
-			"image": "./app/assets/splash-icon.png",
-			"resizeMode": "contain",
-			"backgroundColor": "#ffffff"
-		},
-		"ios": {
-			"supportsTablet": true
-		},
-		"android": {
-			"adaptiveIcon": {
-				"foregroundImage": "./app/assets/adaptive-icon.png",
-				"backgroundColor": "#ffffff"
-			}
-		},
-		"web": {
-			"favicon": "./app/assets/favicon.png"
-		},
-		"extra": {
-			"eas": {
-				"projectId": "3607ec62-7d2e-40c1-84fc-20430c0872d7"
-			}
-		},
-		"owner": "fady777"
-	}
+  "expo": {
+    "name": "smartera",
+    "slug": "smartera",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./app/assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./app/assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./app/assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "web": {
+      "favicon": "./app/assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3607ec62-7d2e-40c1-84fc-20430c0872d7"
+      }
+    },
+    "owner": "fady777",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/3607ec62-7d2e-40c1-84fc-20430c0872d7"
+    }
+  }
 }
