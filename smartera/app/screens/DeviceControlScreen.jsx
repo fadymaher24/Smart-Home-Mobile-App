@@ -8,7 +8,7 @@ import {
 	Alert,
 } from "react-native";
 import { Switch } from "react-native-paper"; // You'll need to install react-native-paper
-import mqttService from "../backend/mqttService";
+import mqttService from "../../backend/mqttService";
 
 const DeviceControlScreen = () => {
 	const [isConnected, setIsConnected] = useState(false);

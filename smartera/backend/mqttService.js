@@ -1,5 +1,4 @@
-import { Client } from "mqtt";
-
+import { Client } from "react-native-paho-mqtt";
 class MQTTService {
 	constructor() {
 		this.client = null;
