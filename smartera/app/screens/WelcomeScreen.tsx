@@ -6,6 +6,8 @@ import { ImageBackground } from "react-native";
 import { StyleSheet } from "react-native";
 import colors from "../config/colors";
 
+import DeviceControlScreen from "./DeviceControlScreen";
+
 function WelcomeScreen(props: React.PropsWithChildren<{}>) {
 	return (
 		// <ImageBackground
@@ -26,7 +28,8 @@ function WelcomeScreen(props: React.PropsWithChildren<{}>) {
 				Welcome to Smart Home
 			</Text>
 			<View style={styles.loginButton}>
-				<Text style={styles.Text}>Login</Text>
+				<Text style={styles.Text} >Login</Text>
+				
 			</View>
 			<View style={styles.registerButton}>
 				<Text style={styles.Text}>Register</Text>
