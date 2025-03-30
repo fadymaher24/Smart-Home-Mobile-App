@@ -1,5 +1,17 @@
-import { Client } from "react-native-paho-mqtt";
+import { Client, IClientOptions } from "react-native-paho-mqtt";
+
+interface SubscriptionCallback {
+	[topic: string]: (message: string) => void;
+}
+
 class MQTTService {
+	private client: Client | null;
+	private isConnected: boolean;
+	private subscriptions: SubscriptionCallback;
+	private reconnectAttempts: number;
+	private maxReconnectAttempts: number;
+	private reconnectDelay: number;
+
 	constructor() {
 		this.client = null;
 		this.isConnected = false;
@@ -10,10 +22,13 @@ class MQTTService {
 	}
 
 	// Initialize connection to HiveMQ
-	connect = (onConnectCallback, onMessageCallback) => {
+	connect = (
+		onConnectCallback?: () => void,
+		onMessageCallback?: (topic: string, message: string) => void
+	): void => {
 		// Replace with your HiveMQ broker details
 		const brokerUrl = "wss://your-hivemq-broker-url:8884/mqtt";
-		const options = {
+		const options: IClientOptions = {
 			clientId:
 				"react-native-client-" + Math.random().toString(16).substr(2, 8),
 			username: "your-username", // if required
@@ -23,7 +38,7 @@ class MQTTService {
 		};
 
 		try {
-			this.client = Client(brokerUrl, options);
+			this.client = new Client(brokerUrl, options);
 
 			this.client.on("connect", () => {
 				this.isConnected = true;
@@ -32,11 +47,11 @@ class MQTTService {
 				if (onConnectCallback) onConnectCallback();
 			});
 
-			this.client.on("message", (topic, message) => {
+			this.client.on("message", (topic: string, message: string) => {
 				if (onMessageCallback) onMessageCallback(topic, message.toString());
 			});
 
-			this.client.on("error", (error) => {
+			this.client.on("error", (error: Error) => {
 				console.error("MQTT Error:", error);
 				this.handleConnectionError();
 			});
@@ -58,7 +73,7 @@ class MQTTService {
 		}
 	};
 
-	handleConnectionError = () => {
+	private handleConnectionError = (): void => {
 		if (this.reconnectAttempts < this.maxReconnectAttempts) {
 			this.reconnectAttempts++;
 			console.log(
@@ -75,7 +90,11 @@ class MQTTService {
 	};
 
 	// Publish a message to a topic
-	publish = (topic, message, options = { qos: 0, retain: false }) => {
+	publish = (
+		topic: string,
+		message: string,
+		options: { qos: number; retain: boolean } = { qos: 0, retain: false }
+	): boolean => {
 		if (!this.isConnected || !this.client) {
 			console.error("MQTT Client not connected");
 			return false;
@@ -91,7 +110,7 @@ class MQTTService {
 	};
 
 	// Subscribe to a topic
-	subscribe = (topic, callback) => {
+	subscribe = (topic: string, callback: (message: string) => void): boolean => {
 		if (!this.isConnected || !this.client) {
 			console.error("MQTT Client not connected");
 			return false;
@@ -99,7 +118,7 @@ class MQTTService {
 
 		try {
 			if (!this.subscriptions[topic]) {
-				this.client.subscribe(topic, { qos: 0 }, (err) => {
+				this.client.subscribe(topic, { qos: 0 }, (err?: Error) => {
 					if (err) {
 						console.error("Subscription Error:", err);
 					} else {
@@ -116,7 +135,7 @@ class MQTTService {
 	};
 
 	// Unsubscribe from a topic
-	unsubscribe = (topic) => {
+	unsubscribe = (topic: string): boolean => {
 		if (!this.isConnected || !this.client) {
 			console.error("MQTT Client not connected");
 			return false;
@@ -136,7 +155,7 @@ class MQTTService {
 	};
 
 	// Disconnect from the broker
-	disconnect = () => {
+	disconnect = (): boolean => {
 		if (this.client && this.isConnected) {
 			try {
 				this.client.end();

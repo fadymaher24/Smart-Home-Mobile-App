@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react-native";
 import { StyleSheet, Text, View } from "react-native";
 import WelcomeScreen from "./app/screens/WelcomeScreen";
 import Navigator from "./routes/homestack";
 import * as Font from "expo-font";
 
-export default function App() {
-	const [fontsLoaded, setFontsLoaded] = useState(false);
+export default function App(): JSX.Element {
+	const [fontsLoaded, setFontsLoaded] = useState<boolean>(false);
 
 	useEffect(() => {
-		async function loadFonts() {
+		async function loadFonts(): Promise<void> {
 			await Font.loadAsync({
 				"Roboto-Black": require("./app/assets/fonts/Roboto-Black.ttf"),
 				"Roboto-Bold": require("./app/assets/fonts/Roboto-Bold.ttf"),

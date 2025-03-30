@@ -10,16 +10,21 @@ import {
 import { Switch } from "react-native-paper"; // You'll need to install react-native-paper
 import mqttService from "../../backend/mqttService";
 
-const DeviceControlScreen = () => {
-	const [isConnected, setIsConnected] = useState(false);
-	const [loading, setLoading] = useState(true);
-	const [deviceStates, setDeviceStates] = useState({
+interface DeviceStates {
+	device1: boolean;
+	device2: boolean;
+}
+
+const DeviceControlScreen: React.FC = () => {
+	const [isConnected, setIsConnected] = useState<boolean>(false);
+	const [loading, setLoading] = useState<boolean>(true);
+	const [deviceStates, setDeviceStates] = useState<DeviceStates>({
 		device1: false,
 		device2: false,
 	});
 
 	// MQTT Topics (replace with your actual topics)
-	const TOPICS = {
+	const TOPICS: Record<string, string> = {
 		DEVICE1_CONTROL: "home/device1/control",
 		DEVICE1_STATUS: "home/device1/status",
 		DEVICE2_CONTROL: "home/device2/control",
@@ -36,7 +41,7 @@ const DeviceControlScreen = () => {
 		};
 	}, []);
 
-	const initializeMQTT = () => {
+	const initializeMQTT = (): void => {
 		setLoading(true);
 
 		mqttService.connect(
@@ -53,14 +58,14 @@ const DeviceControlScreen = () => {
 				mqttService.publish(TOPICS.DEVICE1_STATUS, "get");
 				mqttService.publish(TOPICS.DEVICE2_STATUS, "get");
 			},
-			(topic, message) => {
+			(topic: string, message: string) => {
 				// On message received
 				handleStatusUpdate(topic, message);
 			}
 		);
 	};
 
-	const handleStatusUpdate = (topic, message) => {
+	const handleStatusUpdate = (topic: string, message: string): void => {
 		try {
 			const status = message.toLowerCase() === "on" || message === "1";
 
@@ -74,7 +79,7 @@ const DeviceControlScreen = () => {
 		}
 	};
 
-	const toggleDevice = (device) => {
+	const toggleDevice = (device: keyof DeviceStates): void => {
 		if (!isConnected) {
 			Alert.alert("Connection Error", "Not connected to MQTT broker");
 			return;
@@ -94,7 +99,7 @@ const DeviceControlScreen = () => {
 		}
 	};
 
-	const handleReconnect = () => {
+	const handleReconnect = (): void => {
 		setIsConnected(false);
 		setLoading(true);
 		initializeMQTT();
