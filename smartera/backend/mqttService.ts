@@ -1,4 +1,4 @@
-import { Client, IClientOptions } from "react-native-paho-mqtt";
+import Client from "mqtt";
 
 interface SubscriptionCallback {
 	[topic: string]: (message: string) => void;
@@ -28,7 +28,7 @@ class MQTTService {
 	): void => {
 		// Replace with your HiveMQ broker details
 		const brokerUrl = "wss://your-hivemq-broker-url:8884/mqtt";
-		const options: IClientOptions = {
+		const options: any = {
 			clientId:
 				"react-native-client-" + Math.random().toString(16).substr(2, 8),
 			username: "your-username", // if required
