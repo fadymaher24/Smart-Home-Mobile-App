@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useRef } from "react";
 import { ImageBackground } from "react-native";
 import { StyleSheet } from "react-native";
-import colors from "../config/colors";
+import colors from "../constants/Colors";
 
 import DeviceControlScreen from "./DeviceControlScreen";
 
-function WelcomeScreen(props: React.PropsWithChildren<{}>) {
+function WelcomeScreen({ navigation }) {
+	const [isLoading, setIsLoading] = useState(true);
 	return (
 		// <ImageBackground
 		// 	source={require("../assets/WelcomeScreen.png")}
@@ -28,9 +29,7 @@ function WelcomeScreen(props: React.PropsWithChildren<{}>) {
 				Welcome to Smart Home
 			</Text>
 			<View style={styles.loginButton}>
-				<Text style={styles.Text} >Login</Text>
-				
-				
+				<Text style={styles.Text}>Login</Text>
 			</View>
 			<View style={styles.registerButton}>
 				<Text style={styles.Text}>Register</Text>

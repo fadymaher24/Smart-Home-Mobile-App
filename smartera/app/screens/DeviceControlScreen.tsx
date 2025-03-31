@@ -8,7 +8,7 @@ import {
 	Alert,
 } from "react-native";
 import { Switch } from "react-native-paper"; // You'll need to install react-native-paper
-import mqttService from "../../backend/mqttService";
+import mqttService from "../Services/mqttService"; // Adjust the import path as necessary
 
 interface DeviceStates {
 	device1: boolean;
@@ -37,6 +37,8 @@ const DeviceControlScreen: React.FC = () => {
 
 		return () => {
 			// Clean up on unmount
+			mqttService.unsubscribe(TOPICS.DEVICE1_STATUS);
+			mqttService.unsubscribe(TOPICS.DEVICE2_STATUS);
 			mqttService.disconnect();
 		};
 	}, []);
@@ -58,16 +60,19 @@ const DeviceControlScreen: React.FC = () => {
 				mqttService.publish(TOPICS.DEVICE1_STATUS, "get");
 				mqttService.publish(TOPICS.DEVICE2_STATUS, "get");
 			},
-			(topic: string, message: string) => {
-				// On message received
-				handleStatusUpdate(topic, message);
+			(error: string) => {
+				// Handle connection error
+				console.error("MQTT connection error:", error);
+				setIsConnected(false);
+				setLoading(false);
 			}
 		);
 	};
 
 	const handleStatusUpdate = (topic: string, message: string): void => {
 		try {
-			const status = message.toLowerCase() === "on" || message === "1";
+			const status =
+				message.trim().toLowerCase() === "on" || message.trim() === "1";
 
 			if (topic === TOPICS.DEVICE1_STATUS) {
 				setDeviceStates((prev) => ({ ...prev, device1: status }));
@@ -94,12 +99,13 @@ const DeviceControlScreen: React.FC = () => {
 		if (!success) {
 			Alert.alert("Error", "Failed to send command to device");
 		} else {
-			// Optimistic UI update - will be confirmed when status update arrives
+			// Optimistic UI update - only update if publish succeeds
 			setDeviceStates((prev) => ({ ...prev, [device]: newState }));
 		}
 	};
 
 	const handleReconnect = (): void => {
+		if (loading) return; // Prevent multiple reconnection attempts
 		setIsConnected(false);
 		setLoading(true);
 		initializeMQTT();
