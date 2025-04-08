@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react-native";
 import { StyleSheet, Text, View } from "react-native";
 import WelcomeScreen from "./app/screens/WelcomeScreen";
-import Navigator from "./routes/homestack";
+// import Navigator from "./routes/homestack";
 import * as Font from "expo-font";
 
 export default function App(): JSX.Element {
