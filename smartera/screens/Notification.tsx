@@ -9,7 +9,7 @@ export default function Notification() {
 	return (
 		<View style={styles(colorScheme).container}>
 			<Text style={{ color: colorScheme === "dark" ? "#fff" : "#000" }}>
-				Notification
+				Notifications
 			</Text>
 			<StatusBar style="auto" />
 		</View>

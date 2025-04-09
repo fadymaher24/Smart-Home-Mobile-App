@@ -14,7 +14,7 @@ function TabGroup() {
 		<Tab.Navigator
 			screenOptions={({ route, navigation }) => ({
 				headerShown: false,
-				tabBarIcon: ({ color, focused, size }) => {
+				tabBarIcon: ({ color, size }) => {
 					let iconName: "home" | "settings" | "bell" | undefined;
 					if (route.name === "Welcome") {
 						iconName = "home";
@@ -29,40 +29,21 @@ function TabGroup() {
 						<Feather name={iconName} size={size} color={color} />
 					) : null;
 				},
+				tabBarActiveTintColor: "#4CAF50", // Cool green
+				tabBarInactiveTintColor: "#9E9E9E", // Neutral gray
+				tabBarStyle: {
+					backgroundColor: "#212121", // Dark background
+					borderTopWidth: 0,
+				},
 			})}
 		>
-			<Tab.Screen
-				name="Welcome"
-				component={Welcome}
-				options={{
-					tabBarIcon: ({ color, size }) => (
-						<Feather name="home" size={size} color={color} />
-					),
-					tabBarLabel: "Home",
-				}}
-			/>
-			<Tab.Screen
-				name="Settings"
-				component={Settings}
-				options={{
-					tabBarIcon: ({ color, size }) => (
-						<Feather name="settings" size={size} color={color} />
-					),
-				}}
-			/>
-			<Tab.Screen
-				name="Notification"
-				component={Notification}
-				options={{
-					tabBarIcon: ({ color, size }) => (
-						<Feather name="bell" size={size} color={color} />
-					),
-				}}
-			/>
+			<Tab.Screen name="Welcome" component={Welcome} />
+			<Tab.Screen name="Settings" component={Settings} />
+			<Tab.Screen name="Notification" component={Notification} />
 		</Tab.Navigator>
 	);
 }
 
-export default function AppNavigation() {
+export default function index() {
 	return <TabGroup />;
 }
