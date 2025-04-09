@@ -3,14 +3,21 @@ import "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import { useColorScheme } from "react-native";
 import { StyleSheet, Text, View } from "react-native";
+import { Button } from "react-native-paper";
 
 export default function Welcome() {
 	const colorScheme = useColorScheme() ?? "light";
 	return (
 		<View style={styles(colorScheme).container}>
+			<Button onClick={() => alert("Welcome to Smartera!")}>
+				<Text style={{ color: colorScheme === "dark" ? "#fff" : "#000" }}>
+					Welcome to Smartera!
+				</Text>
+			</Button>
 			<Text style={{ color: colorScheme === "dark" ? "#fff" : "#000" }}>
-				Smart Home App
+				After Pressed Welcome
 			</Text>
+
 			<StatusBar style="auto" />
 		</View>
 	);

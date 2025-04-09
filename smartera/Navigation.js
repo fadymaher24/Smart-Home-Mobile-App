@@ -1,6 +1,6 @@
 import { NavigationContainer } from "@react-navigation/native";
 import React from "react";
-import Welcome from "./screens/Welcome";
+import Welcome from "./screens/tabscreens/Welcome";
 
 export default function AppNavigation() {
 	return <NavigationContainer>{<Welcome />}</NavigationContainer>;
