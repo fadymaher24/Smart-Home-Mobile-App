@@ -3,6 +3,7 @@ import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useColorScheme } from "react-native";
 import { StatusBar } from "expo-status-bar";
+
 import "react-native-gesture-handler";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
@@ -11,6 +12,7 @@ import Feather from "@expo/vector-icons/Feather";
 import Welcome from "../screens/tabscreens/Welcome";
 import Settings from "../screens/tabscreens/Settings";
 import Notification from "../screens/tabscreens/Notification";
+import StackMe from "../screens/HomeStack/Stackme";
 
 const HomeStack = createNativeStackNavigator();
 
@@ -18,6 +20,7 @@ function HomeStackScreen() {
 	return (
 		<HomeStack.Navigator>
 			<HomeStack.Screen name="Welcome" component={Welcome} />
+			<HomeStack.Screen name="StackMe" component={StackMe} />
 		</HomeStack.Navigator>
 	);
 }
@@ -52,7 +55,7 @@ function TabGroup() {
 				},
 			})}
 		>
-			<Tab.Screen name="Welcome" component={Welcome} />
+			<Tab.Screen name="Welcome" component={HomeStackScreen} />
 			<Tab.Screen name="Settings" component={Settings} />
 			<Tab.Screen name="Notification" component={Notification} />
 		</Tab.Navigator>

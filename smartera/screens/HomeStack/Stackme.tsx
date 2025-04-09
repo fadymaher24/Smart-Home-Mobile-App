@@ -4,7 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { useColorScheme } from "react-native";
 import { StyleSheet, Text, View } from "react-native";
 
-export default function Welcome() {
+export default function StackMe() {
 	const colorScheme = useColorScheme() ?? "light";
 	return (
 		<View style={styles(colorScheme).container}>

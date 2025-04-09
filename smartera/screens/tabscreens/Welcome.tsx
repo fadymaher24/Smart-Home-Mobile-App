@@ -2,21 +2,18 @@ import React from "react";
 import "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import { useColorScheme } from "react-native";
-import { StyleSheet, Text, View } from "react-native";
-import { Button } from "react-native-paper";
+import { StyleSheet, Text, Button, View } from "react-native";
+import { NavigationProp } from "@react-navigation/native";
 
-export default function Welcome() {
+interface WelcomeProps {
+	navigation: NavigationProp<any>;
+}
+
+export default function Welcome({ navigation }: WelcomeProps) {
 	const colorScheme = useColorScheme() ?? "light";
 	return (
 		<View style={styles(colorScheme).container}>
-			<Button onClick={() => alert("Welcome to Smartera!")}>
-				<Text style={{ color: colorScheme === "dark" ? "#fff" : "#000" }}>
-					Welcome to Smartera!
-				</Text>
-			</Button>
-			<Text style={{ color: colorScheme === "dark" ? "#fff" : "#000" }}>
-				After Pressed Welcome
-			</Text>
+			<Button title="Press me" onPress={() => navigation.navigate("StackMe")} />
 
 			<StatusBar style="auto" />
 		</View>
