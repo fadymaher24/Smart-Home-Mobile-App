@@ -3,14 +3,11 @@
 # dependencies
 node_modules/
 
-# dependencie files
-pnpm-lock.yaml
-
 # Expo
 .expo/
 dist/
 web-build/
-android/
+expo-env.d.ts
 
 # Native
 *.orig.*
@@ -33,8 +30,9 @@ yarn-error.*
 *.pem
 
 # local env files
-.env
 .env*.local
 
 # typescript
 *.tsbuildinfo
+
+app-example

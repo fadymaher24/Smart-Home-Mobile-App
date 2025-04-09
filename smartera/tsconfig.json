@@ -3,18 +3,16 @@
 	"compilerOptions": {
 		"jsx": "react",
 		"strict": true,
-		"esModuleInterop": true,
-		"plugins": [
-			{
-				"transform": "expo-router/babel",
-				"options": {
-					"root": "./src/app"
-				}
-			},
-			{
-				"transform": "react-native-reanimated/plugin",
-				"relativeSourceLocation": true
-			}
-		]
-	}
+		"paths": {
+			"@/*": ["./*"]
+		}
+	},
+	"include": [
+		"**/*.ts",
+		"**/*.tsx",
+		".expo/types/**/*.ts",
+		"expo-env.d.ts",
+		"app/app.tsx",
+		"app/index.tsx"
+	]
 }
