@@ -1,8 +1,8 @@
 // import { NavigationContainer } from "@react-navigation/native";
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { useColorScheme } from "react-native";
-import { StatusBar } from "expo-status-bar";
+
+import { createDrawerNavigator } from "@react-navigation/drawer";
 
 import "react-native-gesture-handler";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -15,6 +15,25 @@ import Notification from "../screens/tabscreens/Notification";
 import StackMe from "../screens/HomeStack/Stackme";
 
 const HomeStack = createNativeStackNavigator();
+const drawer = createDrawerNavigator();
+
+function drawerScreen() {
+	return (
+		<drawer.Navigator screenOptions={{ headerShown: false }}>
+			<drawer.Screen name="Home" component={HomeStackScreen} />
+			<drawer.Screen
+				name="Settings"
+				component={Settings}
+				options={{ headerShown: true }}
+			/>
+			<drawer.Screen
+				name="Notification"
+				component={Notification}r
+				options={{ headerShown: true }}
+			/>
+		</drawer.Navigator>
+	);
+}
 
 function HomeStackScreen() {
 	return (
@@ -63,5 +82,8 @@ function TabGroup() {
 }
 
 export default function index() {
-	return <TabGroup />;
+	return (
+		//  <TabGroup />
+		drawerScreen()
+	);
 }
