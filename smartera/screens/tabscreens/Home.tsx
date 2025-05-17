@@ -54,7 +54,7 @@ export default function Home() {
                   isDark ? styles.textLight : styles.textDark,
                 ]}
               >
-                May 16, 2023 10:05 AM
+                Oct 16, 2025 10:05 AM
               </Text>
               <Text
                 style={[
@@ -70,7 +70,7 @@ export default function Home() {
                   isDark ? styles.textLight : styles.textDark,
                 ]}
               >
-                Jakarta, Indonesia
+                Cairo, Egypt
               </Text>
             </View>
             <View style={styles.weatherRight}>

@@ -38,7 +38,11 @@ function drawerScreen() {
 function HomeStackScreen() {
   return (
     <HomeStack.Navigator>
-      <HomeStack.Screen name="HomeStackHome" component={Home} />
+      <HomeStack.Screen
+        name="HomeStackHome"
+        component={Home}
+        options={{ headerShown: false }}
+      />
       <HomeStack.Screen name="StackMe" component={StackMe} />
     </HomeStack.Navigator>
   );
