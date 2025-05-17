@@ -1,8 +1,13 @@
 import React from "react";
 import "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
-import { useColorScheme } from "react-native";
-import { StyleSheet, Text, Button, View } from "react-native";
+import {
+  useColorScheme,
+  StyleSheet,
+  Button,
+  View,
+  ColorSchemeName,
+} from "react-native";
 import { NavigationProp } from "@react-navigation/native";
 
 interface WelcomeProps {
@@ -10,17 +15,20 @@ interface WelcomeProps {
 }
 
 export default function Welcome({ navigation }: WelcomeProps) {
-  const colorScheme = useColorScheme() ?? "dark";
+  const colorScheme = useColorScheme(); // "light" | "dark" | null
+
   return (
     <View style={styles(colorScheme).container}>
-      <Button title="Press me" onPress={() => navigation.navigate("StackMe")} />
-
-      <StatusBar style="auto" />
+      <Button
+        title="Go to StackMe"
+        onPress={() => navigation.navigate("StackMe")}
+      />
+      <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
     </View>
   );
 }
 
-const styles = (colorScheme: "dark" | "light") =>
+const styles = (colorScheme: ColorSchemeName) =>
   StyleSheet.create({
     container: {
       flex: 1,
