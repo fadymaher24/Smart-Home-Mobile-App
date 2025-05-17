@@ -20,7 +20,7 @@ const drawer = createDrawerNavigator();
 function drawerScreen() {
   return (
     <drawer.Navigator screenOptions={{ headerShown: false }}>
-      <drawer.Screen name="Home" component={HomeStackScreen} />
+      <drawer.Screen name="MainHome" component={HomeStackScreen} />
       <drawer.Screen
         name="Settings"
         component={Settings}
@@ -38,7 +38,7 @@ function drawerScreen() {
 function HomeStackScreen() {
   return (
     <HomeStack.Navigator>
-      <HomeStack.Screen name="Home" component={Home} />
+      <HomeStack.Screen name="HomeStackHome" component={Home} />
       <HomeStack.Screen name="StackMe" component={StackMe} />
     </HomeStack.Navigator>
   );
@@ -53,7 +53,7 @@ function TabGroup() {
         headerShown: false,
         tabBarIcon: ({ color, size }) => {
           let iconName: "home" | "settings" | "bell" | undefined;
-          if (route.name === "Welcome") {
+          if (route.name === "MainHome") {
             iconName = "home";
           }
           if (route.name === "Settings") {
@@ -74,7 +74,7 @@ function TabGroup() {
         },
       })}
     >
-      <Tab.Screen name="Welcome" component={HomeStackScreen} />
+      <Tab.Screen name="MainHome" component={HomeStackScreen} />
       <Tab.Screen name="Settings" component={Settings} />
       <Tab.Screen name="Notification" component={Notification} />
     </Tab.Navigator>
