@@ -6,7 +6,7 @@ import { ImageBackground } from "react-native";
 import { StyleSheet } from "react-native";
 import colors from "../constants/Colors";
 
-import DeviceControlScreen from "./DeviceControlScreen";
+// import DeviceControlScreen from "./DeviceControlScreen";
 
 function WelcomeScreen({ navigation }) {
 	const [isLoading, setIsLoading] = useState(true);
