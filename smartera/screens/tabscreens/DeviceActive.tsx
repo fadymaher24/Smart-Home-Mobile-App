@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 
 const devices = [
   {
@@ -149,7 +150,12 @@ const DevicesActive = () => {
       >
         <View style={styles.headerRow}>
           <TouchableOpacity>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
+            <Ionicons
+              name="arrow-back"
+              size={24}
+              color="#fff"
+              onPress={() => router.push("/Welcome")}
+            />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Devices Active</Text>
           <Ionicons name="search" size={24} color="#fff" />
