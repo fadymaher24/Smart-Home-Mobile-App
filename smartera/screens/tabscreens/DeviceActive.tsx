@@ -1,5 +1,14 @@
 import React from "react";
-import { View, Text, ScrollView, Image, TouchableOpacity } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  useColorScheme,
+  Dimensions,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -58,33 +67,69 @@ type Device = {
   status: string;
 };
 
+const { width } = Dimensions.get("window");
+
 const DeviceCard = ({ device }: { device: Device }) => {
+  const colorScheme = useColorScheme() ?? "light";
+  const isDark = colorScheme === "dark";
   return (
-    <View className="w-[47%] bg-[#A97664] rounded-2xl p-3 mb-3">
+    <View
+      style={[
+        styles.deviceCard,
+        isDark ? styles.deviceCardDark : styles.deviceCardLight,
+      ]}
+    >
       <Image
         source={device.icon}
-        className="h-16 w-16 self-end"
+        style={styles.deviceIcon}
         resizeMode="contain"
       />
       {device.temp && (
-        <Text className="text-white text-sm mt-1">
-          Temperature <Text className="font-bold">{device.temp}°C</Text>
+        <Text
+          style={[
+            styles.deviceDetail,
+            isDark ? styles.textLight : styles.textDark,
+          ]}
+        >
+          Temperature{" "}
+          <Text style={styles.deviceDetailBold}>{device.temp}°C</Text>
         </Text>
       )}
       {device.color && (
-        <Text className="text-white text-sm mt-1">
-          Color <Text className="font-bold">{device.color}</Text>
+        <Text
+          style={[
+            styles.deviceDetail,
+            isDark ? styles.textLight : styles.textDark,
+          ]}
+        >
+          Color <Text style={styles.deviceDetailBold}>{device.color}</Text>
         </Text>
       )}
       {device.channel && (
-        <Text className="text-white text-sm mt-1">
-          Channel <Text className="font-bold">{device.channel}</Text>
+        <Text
+          style={[
+            styles.deviceDetail,
+            isDark ? styles.textLight : styles.textDark,
+          ]}
+        >
+          Channel <Text style={styles.deviceDetailBold}>{device.channel}</Text>
         </Text>
       )}
-      <Text className="text-white text-lg font-bold mt-1">{device.type}</Text>
-      <Text className="text-white text-sm mb-1">{device.location}</Text>
-      <View className="bg-[#DBEEE6] w-14 py-1 rounded-full self-end items-center">
-        <Text className="text-green-600 text-xs font-bold">
+      <Text
+        style={[styles.deviceType, isDark ? styles.textLight : styles.textDark]}
+      >
+        {device.type}
+      </Text>
+      <Text
+        style={[
+          styles.deviceLocation,
+          isDark ? styles.textLight : styles.textDark,
+        ]}
+      >
+        {device.location}
+      </Text>
+      <View style={isDark ? styles.statusPillDark : styles.statusPill}>
+        <Text style={isDark ? styles.statusTextDark : styles.statusText}>
           {device.status}
         </Text>
       </View>
@@ -93,47 +138,223 @@ const DeviceCard = ({ device }: { device: Device }) => {
 };
 
 const DevicesActive = () => {
+  const colorScheme = useColorScheme() ?? "light";
+  const isDark = colorScheme === "dark";
   return (
-    <View className="flex-1 bg-white">
+    <View style={[styles.container, isDark ? styles.bgDark : styles.bgLight]}>
       {/* Header */}
       <LinearGradient
-        colors={["#579BB1", "#337CA0"]}
-        className="px-4 py-6 rounded-b-3xl"
+        colors={isDark ? ["#232526", "#414345"] : ["#579BB1", "#337CA0"]}
+        style={styles.headerGradient}
       >
-        <View className="flex-row justify-between items-center">
+        <View style={styles.headerRow}>
           <TouchableOpacity>
-            <Ionicons name="arrow-back" size={24} color="white" />
+            <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
-          <Text className="text-white text-lg font-bold">Devices Active</Text>
-          <Ionicons name="search" size={24} color="white" />
+          <Text style={styles.headerTitle}>Devices Active</Text>
+          <Ionicons name="search" size={24} color="#fff" />
         </View>
       </LinearGradient>
 
-      <ScrollView className="p-4">
-        <View className="flex-row justify-between items-center mb-2">
-          <Text className="text-lg font-semibold">
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.topRow}>
+          <Text
+            style={[
+              styles.activeTitle,
+              isDark ? styles.textLight : styles.textDark,
+            ]}
+          >
             Device Active{" "}
-            <Text className="bg-gray-300 px-2 py-0.5 rounded-full text-xs">
-              {devices.length}
-            </Text>
+            <Text style={styles.activeCount}>{devices.length}</Text>
           </Text>
-          <TouchableOpacity className="bg-[#A97664] w-6 h-6 rounded-full items-center justify-center">
-            <Text className="text-white text-xl font-bold">+</Text>
+          <TouchableOpacity style={styles.addBtn}>
+            <Text style={styles.addBtnText}>+</Text>
           </TouchableOpacity>
         </View>
 
-        <View className="flex-row flex-wrap justify-between">
+        <View style={styles.deviceGrid}>
           {devices.map((device, index) => (
             <DeviceCard key={index} device={device} />
           ))}
         </View>
 
-        <TouchableOpacity className="bg-[#A97664] py-3 rounded-xl mt-6 items-center">
-          <Text className="text-white font-semibold">Turn Off All Devices</Text>
+        <TouchableOpacity style={styles.turnOffBtn}>
+          <Text style={styles.turnOffBtnText}>Turn Off All Devices</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  bgLight: {
+    backgroundColor: "#F4F7FA",
+  },
+  bgDark: {
+    backgroundColor: "#181A20",
+  },
+  headerGradient: {
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+  },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  headerTitle: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "bold",
+    letterSpacing: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  activeTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#23272F",
+  },
+  activeCount: {
+    backgroundColor: "#E0E0E0",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    fontSize: 13,
+    color: "#23272F",
+    marginLeft: 4,
+  },
+  addBtn: {
+    backgroundColor: "#A97664",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addBtnText: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "bold",
+    marginTop: -2,
+  },
+  deviceGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+  deviceCard: {
+    width: width * 0.44,
+    backgroundColor: "#A97664",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  deviceCardLight: {
+    backgroundColor: "#A97664",
+  },
+  deviceCardDark: {
+    backgroundColor: "#232526",
+    borderWidth: 1,
+    borderColor: "#444",
+  },
+  deviceIcon: {
+    height: 56,
+    width: 56,
+    alignSelf: "flex-end",
+    marginBottom: 8,
+  },
+  deviceDetail: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  deviceDetailBold: {
+    fontWeight: "bold",
+  },
+  deviceType: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginTop: 6,
+  },
+  deviceLocation: {
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  statusPill: {
+    backgroundColor: "#DBEEE6",
+    width: 56,
+    paddingVertical: 4,
+    borderRadius: 16,
+    alignSelf: "flex-end",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  statusPillDark: {
+    backgroundColor: "#333",
+    width: 56,
+    paddingVertical: 4,
+    borderRadius: 16,
+    alignSelf: "flex-end",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  statusText: {
+    color: "#1DB954",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  statusTextDark: {
+    color: "#A5FFCB",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  turnOffBtn: {
+    backgroundColor: "#A97664",
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: "center",
+    marginTop: 18,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  turnOffBtnText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+    letterSpacing: 0.5,
+  },
+  textLight: {
+    color: "#fff",
+  },
+  textDark: {
+    color: "#23272F",
+  },
+});
 
 export default DevicesActive;

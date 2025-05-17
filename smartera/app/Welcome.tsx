@@ -83,9 +83,9 @@ function TabGroup() {
       })}
     >
       <Tab.Screen name="Home" component={HomeStackScreen} />
+      <Tab.Screen name="DeviceActive" component={DevicesActive} />
       <Tab.Screen name="Settings" component={Settings} />
       <Tab.Screen name="Notification" component={Notification} />
-      <Tab.Screen name="DeviceActive" component={DevicesActive} />
     </Tab.Navigator>
   );
 }
