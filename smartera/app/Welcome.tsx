@@ -14,6 +14,7 @@ import Settings from "../screens/tabscreens/Settings";
 import Notification from "../screens/tabscreens/Notification";
 import StackMe from "../screens/HomeStack/Stackme";
 import DevicesActive from "@/screens/tabscreens/DeviceActive";
+import PowerUsage from "../screens/tabscreens/PowerUsage";
 
 const HomeStack = createNativeStackNavigator();
 const drawer = createDrawerNavigator();
@@ -57,7 +58,13 @@ function TabGroup() {
       screenOptions={({ route, navigation }) => ({
         headerShown: false,
         tabBarIcon: ({ color, size }) => {
-          let iconName: "home" | "settings" | "bell" | "smartphone" | undefined;
+          let iconName:
+            | "home"
+            | "settings"
+            | "bell"
+            | "smartphone"
+            | "activity"
+            | undefined;
           if (route.name === "Home") {
             iconName = "home";
           }
@@ -69,6 +76,9 @@ function TabGroup() {
           }
           if (route.name === "DeviceActive") {
             iconName = "smartphone";
+          }
+          if (route.name === "Power Usage") {
+            iconName = "activity";
           }
           return iconName ? (
             <Feather name={iconName} size={size} color={color} />
@@ -84,6 +94,7 @@ function TabGroup() {
     >
       <Tab.Screen name="Home" component={HomeStackScreen} />
       <Tab.Screen name="DeviceActive" component={DevicesActive} />
+      <Tab.Screen name="Power Usage" component={PowerUsage} />
       <Tab.Screen name="Settings" component={Settings} />
       <Tab.Screen name="Notification" component={Notification} />
     </Tab.Navigator>
