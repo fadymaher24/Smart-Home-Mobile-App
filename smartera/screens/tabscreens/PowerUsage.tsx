@@ -1,13 +1,7 @@
 import React from "react";
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  useColorScheme,
-} from "react-native";
+import { StyleSheet, Text, View, ScrollView, Dimensions } from "react-native";
 import { LineChart } from "react-native-chart-kit";
-import { Dimensions } from "react-native";
+import { useTheme } from "../../context/ThemeContext";
 import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 
 interface UsageItemProps {
@@ -68,67 +62,58 @@ const UsageItem = ({
 );
 
 export default function PowerUsage() {
-  const colorScheme = useColorScheme() ?? "light";
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
 
   const data = {
     labels: ["Mon", "Tues", "Wed", "Thurs", "Fri", "Sat", "Sun"],
     datasets: [
       {
         data: [100, 140, 220, 120, 80, 100, 140],
-        color: (opacity = 1) => `rgba(71, 117, 234, ${opacity})`,
+        color: (opacity = 1) =>
+          isDark
+            ? `rgba(76, 175, 80, ${opacity})`
+            : `rgba(71, 117, 234, ${opacity})`,
         strokeWidth: 2,
       },
     ],
   };
 
+  const chartConfig = {
+    backgroundColor: isDark ? "#1a1a1a" : "#ffffff",
+    backgroundGradientFrom: isDark ? "#1a1a1a" : "#ffffff",
+    backgroundGradientTo: isDark ? "#1a1a1a" : "#ffffff",
+    decimalPlaces: 0,
+    color: (opacity = 1) =>
+      isDark ? `rgba(255, 255, 255, ${opacity})` : `rgba(0, 0, 0, ${opacity})`,
+    labelColor: (opacity = 1) =>
+      isDark ? `rgba(255, 255, 255, ${opacity})` : `rgba(0, 0, 0, ${opacity})`,
+    style: {
+      borderRadius: 16,
+    },
+    propsForDots: {
+      r: "6",
+      strokeWidth: "2",
+      stroke: isDark ? "#4CAF50" : "#4775EA",
+    },
+  };
+
   return (
-    <ScrollView style={styles(colorScheme).container}>
-      <View style={styles(colorScheme).header}>
-        <Text
-          style={[
-            styles(colorScheme).headerTitle,
-            { color: colorScheme === "dark" ? "#fff" : "#000" },
-          ]}
-        >
-          Power Usage
-        </Text>
-        <View style={styles(colorScheme).usageWeek}>
-          <Text style={styles(colorScheme).usageLabel}>Usage this Week</Text>
-          <Text
-            style={[
-              styles(colorScheme).usageValue,
-              { color: colorScheme === "dark" ? "#fff" : "#000" },
-            ]}
-          >
-            2500 watt
-          </Text>
+    <ScrollView style={styles(theme).container}>
+      <View style={styles(theme).header}>
+        <Text style={[styles(theme).headerTitle]}>Power Usage</Text>
+        <View style={styles(theme).usageWeek}>
+          <Text style={styles(theme).usageLabel}>Usage this Week</Text>
+          <Text style={[styles(theme).usageValue]}>2500 watt</Text>
         </View>
       </View>
 
-      <View style={styles(colorScheme).chartContainer}>
+      <View style={styles(theme).chartContainer}>
         <LineChart
           data={data}
-          width={Dimensions.get("window").width - 40}
+          width={Dimensions.get("window").width - 32}
           height={220}
-          chartConfig={{
-            backgroundColor: colorScheme === "dark" ? "#1a1a1a" : "#fff",
-            backgroundGradientFrom: colorScheme === "dark" ? "#1a1a1a" : "#fff",
-            backgroundGradientTo: colorScheme === "dark" ? "#1a1a1a" : "#fff",
-            decimalPlaces: 0,
-            color: (opacity = 1) => `rgba(71, 117, 234, ${opacity})`,
-            labelColor: (opacity = 1) =>
-              colorScheme === "dark"
-                ? `rgba(255, 255, 255, ${opacity})`
-                : `rgba(0, 0, 0, ${opacity})`,
-            style: {
-              borderRadius: 16,
-            },
-            propsForDots: {
-              r: "6",
-              strokeWidth: "2",
-              stroke: "#4775EA",
-            },
-          }}
+          chartConfig={chartConfig}
           bezier
           style={{
             marginVertical: 8,
@@ -137,17 +122,32 @@ export default function PowerUsage() {
         />
       </View>
 
-      <View style={styles(colorScheme).todayContainer}>
-        <View style={styles(colorScheme).todayHeader}>
+      <View style={styles(theme).statsContainer}>
+        <View style={styles(theme).statCard}>
+          <Text style={styles(theme).statLabel}>Daily Average</Text>
+          <Text style={styles(theme).statValue}>350W</Text>
+        </View>
+        <View style={styles(theme).statCard}>
+          <Text style={styles(theme).statLabel}>Peak Usage</Text>
+          <Text style={styles(theme).statValue}>520W</Text>
+        </View>
+        <View style={styles(theme).statCard}>
+          <Text style={styles(theme).statLabel}>Total Cost</Text>
+          <Text style={styles(theme).statValue}>$45.20</Text>
+        </View>
+      </View>
+
+      <View style={styles(theme).todayContainer}>
+        <View style={styles(theme).todayHeader}>
           <Text
             style={[
-              styles(colorScheme).todayTitle,
-              { color: colorScheme === "dark" ? "#fff" : "#000" },
+              styles(theme).todayTitle,
+              { color: theme === "dark" ? "#fff" : "#000" },
             ]}
           >
             Total Today
           </Text>
-          <Text style={styles(colorScheme).seeAll}>See All</Text>
+          <Text style={styles(theme).seeAll}>See All</Text>
         </View>
 
         <UsageItem
@@ -155,7 +155,7 @@ export default function PowerUsage() {
             <MaterialCommunityIcons
               name="lightbulb-outline"
               size={24}
-              color={colorScheme === "dark" ? "#fff" : "#000"}
+              color={theme === "dark" ? "#fff" : "#000"}
             />
           }
           title="Lamp"
@@ -163,7 +163,7 @@ export default function PowerUsage() {
           usage="1000 Kw/h"
           time="12 Jan"
           percentage="-11.2%"
-          colorScheme={colorScheme}
+          colorScheme={theme}
         />
 
         <UsageItem
@@ -171,7 +171,7 @@ export default function PowerUsage() {
             <MaterialCommunityIcons
               name="air-conditioner"
               size={24}
-              color={colorScheme === "dark" ? "#fff" : "#000"}
+              color={theme === "dark" ? "#fff" : "#000"}
             />
           }
           title="Air Conditioner"
@@ -179,7 +179,7 @@ export default function PowerUsage() {
           usage="1000 Kw/h"
           time="12 Jan"
           percentage="-10.2%"
-          colorScheme={colorScheme}
+          colorScheme={theme}
         />
 
         <UsageItem
@@ -187,7 +187,7 @@ export default function PowerUsage() {
             <Feather
               name="speaker"
               size={24}
-              color={colorScheme === "dark" ? "#fff" : "#000"}
+              color={theme === "dark" ? "#fff" : "#000"}
             />
           }
           title="Wireless Speaker"
@@ -195,7 +195,7 @@ export default function PowerUsage() {
           usage="1090 Kw/h"
           time="3 Jan"
           percentage="+10.2%"
-          colorScheme={colorScheme}
+          colorScheme={theme}
         />
 
         <UsageItem
@@ -203,7 +203,7 @@ export default function PowerUsage() {
             <MaterialCommunityIcons
               name="television"
               size={24}
-              color={colorScheme === "dark" ? "#fff" : "#000"}
+              color={theme === "dark" ? "#fff" : "#000"}
             />
           }
           title="Television"
@@ -211,7 +211,7 @@ export default function PowerUsage() {
           usage="1000 Kw/h"
           time="12 Jan"
           percentage="-100.2%"
-          colorScheme={colorScheme}
+          colorScheme={theme}
         />
       </View>
     </ScrollView>
@@ -222,30 +222,65 @@ const styles = (colorScheme: "light" | "dark") =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colorScheme === "dark" ? "#000" : "#fff",
+      backgroundColor: colorScheme === "dark" ? "#000000" : "#ffffff",
     },
     header: {
       padding: 20,
+      paddingTop: 40,
     },
     headerTitle: {
-      fontSize: 24,
+      fontSize: 28,
       fontWeight: "bold",
-      marginBottom: 20,
+      color: colorScheme === "dark" ? "#ffffff" : "#000000",
+      marginBottom: 16,
     },
     usageWeek: {
-      marginBottom: 10,
+      marginTop: 8,
     },
     usageLabel: {
       fontSize: 16,
-      color: "#666",
-      marginBottom: 5,
+      color: colorScheme === "dark" ? "#B0BEC5" : "#757575",
+      marginBottom: 4,
+    },
+    usageValue: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: colorScheme === "dark" ? "#ffffff" : "#000000",
     },
     chartContainer: {
-      padding: 20,
-      backgroundColor: colorScheme === "dark" ? "#1a1a1a" : "#fff",
-      borderRadius: 20,
-      margin: 20,
-      marginTop: 0,
+      padding: 16,
+      backgroundColor: colorScheme === "dark" ? "#1a1a1a" : "#ffffff",
+      borderRadius: 16,
+      margin: 16,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: colorScheme === "dark" ? 0.3 : 0.1,
+      shadowRadius: 4,
+      elevation: 4,
+    },
+    statsContainer: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      padding: 16,
+      marginBottom: 16,
+    },
+    statCard: {
+      flex: 1,
+      backgroundColor: colorScheme === "dark" ? "#1a1a1a" : "#f5f5f5",
+      padding: 16,
+      borderRadius: 12,
+      marginHorizontal: 4,
+      alignItems: "center",
+    },
+    statLabel: {
+      fontSize: 14,
+      color: colorScheme === "dark" ? "#B0BEC5" : "#757575",
+      marginBottom: 4,
+    },
+    statValue: {
+      fontSize: 18,
+      fontWeight: "bold",
+      color: colorScheme === "dark" ? "#4CAF50" : "#4775EA",
     },
     todayContainer: {
       padding: 20,
@@ -288,11 +323,6 @@ const styles = (colorScheme: "light" | "dark") =>
     },
     usageStats: {
       alignItems: "flex-end",
-    },
-    usageValue: {
-      fontSize: 16,
-      fontWeight: "500",
-      marginBottom: 5,
     },
     usagePercentage: {
       fontSize: 14,
