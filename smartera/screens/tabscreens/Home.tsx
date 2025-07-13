@@ -41,15 +41,18 @@ const QuickActionButton = ({
 export default function Home() {
   React.useEffect(() => {
     mqttService.initializeClient({
-      brokerHost: "mqtts-a62d04a.ala.eu-central-1.emqx.cloud",
-      brokerPort: 8084,
+      brokerHost: "xe1521a1.ala.eu-central-1.emqxsl.com", // EMQX Cloud domain only
+      brokerPort: 8084, // EMQX Cloud WebSocket SSL port
       clientId: `mobileApp_${Math.random().toString(36).substring(7)}`,
       useSSL: true,
-      protocol: "wss",
-      path: "/mqtt",
+      path: "/mqtt", // EMQX Cloud WebSocket path
       username: "fady.iot",
       password: "123456",
+      protocol: "mqtt",
     });
+    console.log(
+      "[MQTT] If connection fails, check EMQX Cloud WebSocket settings, port 8084, and public access."
+    );
   }, []);
 
   const { theme } = useTheme();

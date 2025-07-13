@@ -39,9 +39,18 @@ class MqttService {
             console.warn("MQTT client already initialized. Call disconnect first if you want to re-initialize.");
             return;
         }
-        // Initialize the MQTT bridge (required for window.Paho)
-        const host = config.brokerHost;
-        const port = config.brokerPort;
+        // Log connection options for debugging
+        console.log('[MQTT] Initializing client with:', {
+            host: config.brokerHost,
+            port: config.brokerPort,
+            path: config.path || "/mqtt",
+            clientId: config.clientId,
+            useSSL: config.useSSL,
+            username: config.username,
+            password: config.password
+        });
+        const host = config.brokerHost; // Should be domain only
+        const port = config.brokerPort; // 8084 for wss
         const clientId = config.clientId;
         this.client = new Client(host, port, config.path || "/mqtt", clientId);
 
@@ -52,6 +61,7 @@ class MqttService {
             } 
         };
         this.client.onConnectionLost = (err: any) => {
+            console.log('[MQTT] Connection lost:', err);
             if (this.onConnectionStatusChange) {
                 this.onConnectionStatusChange('disconnected');
             }
@@ -62,11 +72,13 @@ class MqttService {
             useSSL: config.useSSL,
             mqttVersion: 4,
             onSuccess: () => {
+                console.log('[MQTT] Connected successfully');
                 if (this.onConnectionStatusChange) {
                     this.onConnectionStatusChange('connected');
                 }
             },
-            onFailure: () => {
+            onFailure: (err: any) => {
+                console.log('[MQTT] Connection failed:', err);
                 if (this.onConnectionStatusChange) {
                     this.onConnectionStatusChange('error');
                 }

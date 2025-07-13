@@ -46,22 +46,69 @@ const DeviceCard = ({
 }) => {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-
+  // New: show connection indicator
+  const isConnected = device.status === "Active";
   return (
     <TouchableOpacity
       style={[
         styles(theme).deviceCard,
-        { backgroundColor: isDark ? "#1a1a1a" : "#f5f5f5" },
+        {
+          backgroundColor: isConnected ? "#E6FFF2" : "#F5F5F5",
+          borderColor:
+            device.status === "Disconnected"
+              ? "#FF5252"
+              : isConnected
+              ? "#4CAF50"
+              : "#B0BEC5",
+          borderWidth: 2,
+        },
       ]}
-      onPress={() =>
-        onControl(device.id, device.status === "Active" ? "turnOff" : "turnOn")
-      }
+      onPress={() => onControl(device.id, isConnected ? "turnOff" : "turnOn")}
     >
       <Image
         source={device.icon}
         style={styles(theme).deviceIcon}
         resizeMode="contain"
       />
+      {/* Connection indicator */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          marginBottom: 4,
+        }}
+      >
+        <View
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: 5,
+            backgroundColor:
+              device.status === "Disconnected"
+                ? "#FF5252"
+                : isConnected
+                ? "#4CAF50"
+                : "#B0BEC5",
+            marginRight: 6,
+          }}
+        />
+        <Text
+          style={{
+            color: isConnected
+              ? "#4CAF50"
+              : device.status === "Disconnected"
+              ? "#FF5252"
+              : "#B0BEC5",
+            fontWeight: "bold",
+          }}
+        >
+          {device.status === "Disconnected"
+            ? "Offline"
+            : isConnected
+            ? "Online"
+            : "Inactive"}
+        </Text>
+      </View>
 
       {device.temp && (
         <Text style={styles(theme).deviceDetail}>
@@ -85,24 +132,25 @@ const DeviceCard = ({
       <Text style={styles(theme).deviceType}>{device.type}</Text>
       <Text style={styles(theme).deviceLocation}>{device.location}</Text>
 
-      <View
-        style={[
-          styles(theme).statusPill,
-          {
-            backgroundColor:
-              device.status === "Active" ? "#4CAF5020" : "#9E9E9E20",
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles(theme).statusText,
-            { color: device.status === "Active" ? "#4CAF50" : "#9E9E9E" },
-          ]}
-        >
-          {device.status}
-        </Text>
+      <View style={styles(theme).statusPill}>
+        <Text style={styles(theme).statusText}>{device.status}</Text>
       </View>
+      {/* New: On/Off indicator button */}
+      <TouchableOpacity
+        style={{
+          marginTop: 8,
+          backgroundColor: isConnected ? "#4CAF50" : "#B0BEC5",
+          paddingHorizontal: 16,
+          paddingVertical: 6,
+          borderRadius: 12,
+          alignSelf: "center",
+        }}
+        onPress={() => onControl(device.id, isConnected ? "turnOff" : "turnOn")}
+      >
+        <Text style={{ color: "#fff", fontWeight: "bold" }}>
+          {isConnected ? "Turn Off" : "Turn On"}
+        </Text>
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 };
@@ -116,11 +164,29 @@ const DevicesActive = () => {
 
   useEffect(() => {
     mqttService.onMessageCallback = (topic: string, message: string) => {
-      const match = topic.match(/^plug\/(.+)\/status$/);
-      if (match) {
-        const plugId = match[1];
+      // Listen for status and connection events
+      const statusMatch = topic.match(/^smartplug\/(.+)\/status$/);
+      const connMatch = topic.match(/^smartplug\/(.+)\/connection$/);
+      if (statusMatch) {
+        const plugId = statusMatch[1];
         setDevices((prev) =>
-          prev.map((d) => (d.id === plugId ? { ...d, status: message } : d))
+          prev.map((d) =>
+            d.id === plugId
+              ? { ...d, status: message === "ON" ? "Active" : "Inactive" }
+              : d
+          )
+        );
+      } else if (connMatch) {
+        const plugId = connMatch[1];
+        setDevices((prev) =>
+          prev.map((d) =>
+            d.id === plugId
+              ? {
+                  ...d,
+                  status: message === "CONNECTED" ? "Active" : "Disconnected",
+                }
+              : d
+          )
         );
       }
     };
@@ -166,9 +232,19 @@ const DevicesActive = () => {
   };
 
   const handleControl = (id: string, action: string) => {
-    console.log(`[MQTT] Sending control: plug/${id}/control -> ${action}`);
-    mqttService.publish(`plug/${id}/control`, action);
+    // Publish to the correct topic for plug control
+    const topic = `smartplug/${id}/command`;
+    console.log(`[MQTT] Sending control: ${topic} -> ${action}`);
+    mqttService.publish(topic, action);
     Alert.alert("Sent", `Sent ${action} to plug ${id}`);
+    // Optimistically update device status in UI
+    setDevices((prev) =>
+      prev.map((d) =>
+        d.id === id
+          ? { ...d, status: action === "turnOn" ? "Active" : "Inactive" }
+          : d
+      )
+    );
   };
 
   return (
