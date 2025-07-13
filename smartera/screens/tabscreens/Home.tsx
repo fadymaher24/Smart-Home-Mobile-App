@@ -26,7 +26,11 @@ const QuickActionButton = ({
   return (
     <TouchableOpacity style={styles(theme).quickActionButton}>
       <View style={styles(theme).iconContainer}>
-        <Feather name={icon} size={24} color={isDark ? "#ffffff" : "#000000"} />
+        <Feather
+          name={icon as any}
+          size={24}
+          color={isDark ? "#ffffff" : "#000000"}
+        />
       </View>
       <Text style={styles(theme).quickActionLabel}>{label}</Text>
     </TouchableOpacity>
@@ -98,7 +102,7 @@ export default function Home() {
             <View key={index} style={styles(theme).statCard}>
               <View style={styles(theme).statHeader}>
                 <Feather
-                  name={stat.icon}
+                  name={stat.icon as any}
                   size={24}
                   color={isDark ? "#4CAF50" : "#4775EA"}
                 />
