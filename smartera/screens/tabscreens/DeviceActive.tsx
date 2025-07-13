@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,13 +7,17 @@ import {
   StyleSheet,
   Dimensions,
   Image,
+  Modal,
+  TextInput,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useTheme } from "../../context/ThemeContext";
+import mqttService from "../../services/mqttService";
 
 interface Device {
-  id: number;
+  id: string; // Unique plug/device ID
   type: string;
   location: string;
   status: string;
@@ -23,43 +27,23 @@ interface Device {
   channel?: string;
 }
 
-const devices: Device[] = [
-  {
-    id: 1,
-    type: "Smart Light",
-    location: "Living Room",
-    status: "Active",
-    icon: require("../../assets/icons/lamp.png"),
-    color: "Warm White",
-  },
-  {
-    id: 2,
-    type: "Air Conditioner",
-    location: "Bedroom",
-    status: "Active",
-    icon: require("../../assets/icons/ac.png"),
-    temp: "24",
-  },
-  {
-    id: 3,
-    type: "Smart TV",
-    location: "Living Room",
-    status: "Inactive",
-    icon: require("../../assets/icons/tv.png"),
-    channel: "Netflix",
-  },
-  {
-    id: 4,
-    type: "Security Camera",
-    location: "Front Door",
-    status: "Active",
-    icon: require("../../assets/icons/tv.png"), // Using TV icon as placeholder for camera
-  },
+const locationOptions = [
+  "Living Room",
+  "Bedroom",
+  "Kitchen",
+  "Front Door",
+  "Other",
 ];
 
 const { width } = Dimensions.get("window");
 
-const DeviceCard = ({ device }: { device: Device }) => {
+const DeviceCard = ({
+  device,
+  onControl,
+}: {
+  device: Device;
+  onControl: (id: string, action: string) => void;
+}) => {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
@@ -69,6 +53,9 @@ const DeviceCard = ({ device }: { device: Device }) => {
         styles(theme).deviceCard,
         { backgroundColor: isDark ? "#1a1a1a" : "#f5f5f5" },
       ]}
+      onPress={() =>
+        onControl(device.id, device.status === "Active" ? "turnOff" : "turnOn")
+      }
     >
       <Image
         source={device.icon}
@@ -122,6 +109,67 @@ const DeviceCard = ({ device }: { device: Device }) => {
 
 const DevicesActive = () => {
   const { theme } = useTheme();
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [newPlugId, setNewPlugId] = useState("");
+  const [newLocation, setNewLocation] = useState(locationOptions[0]);
+
+  useEffect(() => {
+    mqttService.onMessageCallback = (topic: string, message: string) => {
+      const match = topic.match(/^plug\/(.+)\/status$/);
+      if (match) {
+        const plugId = match[1];
+        setDevices((prev) =>
+          prev.map((d) => (d.id === plugId ? { ...d, status: message } : d))
+        );
+      }
+    };
+    return () => {
+      mqttService.onMessageCallback = null;
+    };
+  }, [devices]);
+
+  const handleAddPlug = () => {
+    if (!newPlugId) return;
+    setDevices((prev) => [
+      ...prev,
+      {
+        id: newPlugId,
+        type: "Smart Plug",
+        location: newLocation,
+        status: "Inactive",
+        icon: require("../../assets/icons/lamp.png"),
+      },
+    ]);
+    setModalVisible(false);
+    setNewPlugId("");
+    setNewLocation(locationOptions[0]);
+
+    // Set plugId in mqttService and subscribe to topics
+    mqttService.setPlugId(newPlugId);
+
+    // Only connect if not already connected
+    if (mqttService.client && !mqttService.client.isConnected()) {
+      console.log("[MQTT] Attempting to connect after adding plug...");
+      mqttService.connect(
+        () => console.log(`[MQTT] Connected after adding plug ${newPlugId}`),
+        (err) => console.log(`[MQTT] Connection error after adding plug:`, err)
+      );
+    } else if (mqttService.client && mqttService.client.isConnected()) {
+      console.log(`[MQTT] Already connected after adding plug ${newPlugId}`);
+    } else {
+      console.log("[MQTT] Client not initialized after adding plug.");
+    }
+
+    // Trace what is sent to the broker
+    console.log(`[MQTT] Subscribed to plug topics for ${newPlugId}`);
+  };
+
+  const handleControl = (id: string, action: string) => {
+    console.log(`[MQTT] Sending control: plug/${id}/control -> ${action}`);
+    mqttService.publish(`plug/${id}/control`, action);
+    Alert.alert("Sent", `Sent ${action} to plug ${id}`);
+  };
 
   return (
     <View
@@ -157,21 +205,139 @@ const DevicesActive = () => {
             Device Active{" "}
             <Text style={styles(theme).activeCount}>{devices.length}</Text>
           </Text>
-          <TouchableOpacity style={styles(theme).addBtn}>
+          <TouchableOpacity
+            style={styles(theme).addBtn}
+            onPress={() => setModalVisible(true)}
+          >
             <Text style={styles(theme).addBtnText}>+</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles(theme).devicesGrid}>
           {devices.map((device) => (
-            <DeviceCard key={device.id} device={device} />
+            <DeviceCard
+              key={device.id}
+              device={device}
+              onControl={handleControl}
+            />
           ))}
         </View>
-
-        <TouchableOpacity style={styles(theme).turnOffBtn}>
-          <Text style={styles(theme).turnOffBtnText}>Turn Off All Devices</Text>
-        </TouchableOpacity>
+        {devices.length > 0 && (
+          <TouchableOpacity
+            style={styles(theme).turnOffBtn}
+            onPress={() =>
+              devices.forEach((d) => handleControl(d.id, "turnOff"))
+            }
+          >
+            <Text style={styles(theme).turnOffBtnText}>
+              Turn Off All Devices
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
+
+      {/* Modal for adding plug by ID and location */}
+      <Modal visible={modalVisible} transparent animationType="slide">
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "#00000099",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: theme === "dark" ? "#232526" : "#fff",
+              padding: 24,
+              borderRadius: 16,
+              width: "80%",
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "bold",
+                marginBottom: 12,
+                color: theme === "dark" ? "#fff" : "#23272F",
+              }}
+            >
+              Add Smart Plug
+            </Text>
+            <TextInput
+              placeholder="Enter Plug ID"
+              value={newPlugId}
+              onChangeText={setNewPlugId}
+              style={{
+                borderWidth: 1,
+                borderColor: "#ccc",
+                borderRadius: 8,
+                padding: 10,
+                marginBottom: 16,
+                color: theme === "dark" ? "#fff" : "#23272F",
+              }}
+              placeholderTextColor={theme === "dark" ? "#B0BEC5" : "#757575"}
+            />
+            <Text
+              style={{
+                marginBottom: 8,
+                color: theme === "dark" ? "#fff" : "#23272F",
+              }}
+            >
+              Select Location:
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                marginBottom: 16,
+              }}
+            >
+              {locationOptions.map((loc) => (
+                <TouchableOpacity
+                  key={loc}
+                  style={{
+                    backgroundColor: newLocation === loc ? "#A97664" : "#eee",
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    marginRight: 8,
+                    marginBottom: 8,
+                  }}
+                  onPress={() => setNewLocation(loc)}
+                >
+                  <Text
+                    style={{ color: newLocation === loc ? "#fff" : "#23272F" }}
+                  >
+                    {loc}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={{
+                backgroundColor: "#A97664",
+                padding: 12,
+                borderRadius: 8,
+                alignItems: "center",
+              }}
+              onPress={handleAddPlug}
+            >
+              <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                Add Plug
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ marginTop: 12, alignItems: "center" }}
+              onPress={() => setModalVisible(false)}
+            >
+              <Text style={{ color: theme === "dark" ? "#fff" : "#23272F" }}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

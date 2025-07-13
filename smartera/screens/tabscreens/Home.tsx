@@ -10,6 +10,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../../context/ThemeContext";
+import mqttService from "../../services/mqttService";
 
 const { width } = Dimensions.get("window");
 
@@ -38,6 +39,19 @@ const QuickActionButton = ({
 };
 
 export default function Home() {
+  React.useEffect(() => {
+    mqttService.initializeClient({
+      brokerHost: "mqtts-a62d04a.ala.eu-central-1.emqx.cloud",
+      brokerPort: 8084,
+      clientId: `mobileApp_${Math.random().toString(36).substring(7)}`,
+      useSSL: true,
+      protocol: "wss",
+      path: "/mqtt",
+      username: "fady.iot",
+      password: "123456",
+    });
+  }, []);
+
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
