@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useTheme } from "../../context/ThemeContext";
 import mqttService from "../../services/mqttService";
+import QRScan from "./QRScan";
 
 interface Device {
   id: string; // Unique plug/device ID
@@ -161,6 +162,7 @@ const DevicesActive = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [newPlugId, setNewPlugId] = useState("");
   const [newLocation, setNewLocation] = useState(locationOptions[0]);
+  const [showQR, setShowQR] = useState(false);
 
   useEffect(() => {
     mqttService.onMessageCallback = (topic: string, message: string) => {
@@ -322,96 +324,122 @@ const DevicesActive = () => {
             backgroundColor: "#00000099",
           }}
         >
-          <View
-            style={{
-              backgroundColor: theme === "dark" ? "#232526" : "#fff",
-              padding: 24,
-              borderRadius: 16,
-              width: "80%",
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 18,
-                fontWeight: "bold",
-                marginBottom: 12,
-                color: theme === "dark" ? "#fff" : "#23272F",
+          {showQR ? (
+            <QRScan
+              onScanned={(id) => {
+                setShowQR(false);
+                setNewPlugId(id);
               }}
-            >
-              Add Smart Plug
-            </Text>
-            <TextInput
-              placeholder="Enter Plug ID"
-              value={newPlugId}
-              onChangeText={setNewPlugId}
-              style={{
-                borderWidth: 1,
-                borderColor: "#ccc",
-                borderRadius: 8,
-                padding: 10,
-                marginBottom: 16,
-                color: theme === "dark" ? "#fff" : "#23272F",
-              }}
-              placeholderTextColor={theme === "dark" ? "#B0BEC5" : "#757575"}
+              onCancel={() => setShowQR(false)}
             />
-            <Text
-              style={{
-                marginBottom: 8,
-                color: theme === "dark" ? "#fff" : "#23272F",
-              }}
-            >
-              Select Location:
-            </Text>
+          ) : (
             <View
               style={{
-                flexDirection: "row",
-                flexWrap: "wrap",
-                marginBottom: 16,
+                backgroundColor: theme === "dark" ? "#232526" : "#fff",
+                padding: 24,
+                borderRadius: 16,
+                width: "80%",
               }}
             >
-              {locationOptions.map((loc) => (
-                <TouchableOpacity
-                  key={loc}
-                  style={{
-                    backgroundColor: newLocation === loc ? "#A97664" : "#eee",
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: 8,
-                    marginRight: 8,
-                    marginBottom: 8,
-                  }}
-                  onPress={() => setNewLocation(loc)}
-                >
-                  <Text
-                    style={{ color: newLocation === loc ? "#fff" : "#23272F" }}
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "bold",
+                  marginBottom: 12,
+                  color: theme === "dark" ? "#fff" : "#23272F",
+                }}
+              >
+                Add Smart Plug
+              </Text>
+              <TextInput
+                placeholder="Enter Plug ID"
+                value={newPlugId}
+                onChangeText={setNewPlugId}
+                style={{
+                  borderWidth: 1,
+                  borderColor: "#ccc",
+                  borderRadius: 8,
+                  padding: 10,
+                  marginBottom: 16,
+                  color: theme === "dark" ? "#fff" : "#23272F",
+                }}
+                placeholderTextColor={theme === "dark" ? "#B0BEC5" : "#757575"}
+              />
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#A97664",
+                  padding: 10,
+                  borderRadius: 8,
+                  alignItems: "center",
+                  marginBottom: 12,
+                }}
+                onPress={() => setShowQR(true)}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                  Scan QR Code
+                </Text>
+              </TouchableOpacity>
+              <Text
+                style={{
+                  marginBottom: 8,
+                  color: theme === "dark" ? "#fff" : "#23272F",
+                }}
+              >
+                Select Location:
+              </Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  marginBottom: 16,
+                }}
+              >
+                {locationOptions.map((loc) => (
+                  <TouchableOpacity
+                    key={loc}
+                    style={{
+                      backgroundColor: newLocation === loc ? "#A97664" : "#eee",
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 8,
+                      marginRight: 8,
+                      marginBottom: 8,
+                    }}
+                    onPress={() => setNewLocation(loc)}
                   >
-                    {loc}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={{
+                        color: newLocation === loc ? "#fff" : "#23272F",
+                      }}
+                    >
+                      {loc}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#A97664",
+                  padding: 12,
+                  borderRadius: 8,
+                  alignItems: "center",
+                }}
+                onPress={handleAddPlug}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                  Add Plug
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ marginTop: 12, alignItems: "center" }}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={{ color: theme === "dark" ? "#fff" : "#23272F" }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={{
-                backgroundColor: "#A97664",
-                padding: 12,
-                borderRadius: 8,
-                alignItems: "center",
-              }}
-              onPress={handleAddPlug}
-            >
-              <Text style={{ color: "#fff", fontWeight: "bold" }}>
-                Add Plug
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{ marginTop: 12, alignItems: "center" }}
-              onPress={() => setModalVisible(false)}
-            >
-              <Text style={{ color: theme === "dark" ? "#fff" : "#23272F" }}>
-                Cancel
-              </Text>
-            </TouchableOpacity>
-          </View>
+          )}
         </View>
       </Modal>
     </View>
