@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,62 +7,70 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-} from 'react-native';
-import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
+} from "react-native";
+import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 
 const LoginScreen = () => {
   const { theme } = useTheme();
   const { login, register } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     if (!email || !password || (!isLogin && !name)) {
-      Alert.alert('Error', 'Please fill all fields');
+      Alert.alert("Error", "Please fill all fields");
       return;
     }
 
     setLoading(true);
-    let success = false;
 
-    if (isLogin) {
-      success = await login(email, password);
-    } else {
-      success = await register(name, email, password);
+    try {
+      if (isLogin) {
+        await login(email, password);
+      } else {
+        await register(name, email, password);
+      }
+      // If we get here, login/register was successful
+      // The AuthContext will automatically redirect to the main app
+    } catch (error) {
+      console.error("Auth failed:", error);
+      Alert.alert("Error", isLogin ? "Login failed" : "Registration failed");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
-
-    if (!success) {
-      Alert.alert('Error', isLogin ? 'Login failed' : 'Registration failed');
-    }
-    // If success, the AuthContext will automatically update the user state
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme === 'dark' ? '#000' : '#fff' }]}>
-      <Text style={[styles.title, { color: theme === 'dark' ? '#fff' : '#000' }]}>
-        {isLogin ? 'Login' : 'Register'}
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: theme === "dark" ? "#000" : "#fff" },
+      ]}
+    >
+      <Text
+        style={[styles.title, { color: theme === "dark" ? "#fff" : "#000" }]}
+      >
+        {isLogin ? "Login" : "Register"}
       </Text>
 
       {!isLogin && (
         <TextInput
-          style={[styles.input, { color: theme === 'dark' ? '#fff' : '#000' }]}
+          style={[styles.input, { color: theme === "dark" ? "#fff" : "#000" }]}
           placeholder="Name"
-          placeholderTextColor={theme === 'dark' ? '#B0BEC5' : '#757575'}
+          placeholderTextColor={theme === "dark" ? "#B0BEC5" : "#757575"}
           value={name}
           onChangeText={setName}
         />
       )}
 
       <TextInput
-        style={[styles.input, { color: theme === 'dark' ? '#fff' : '#000' }]}
+        style={[styles.input, { color: theme === "dark" ? "#fff" : "#000" }]}
         placeholder="Email"
-        placeholderTextColor={theme === 'dark' ? '#B0BEC5' : '#757575'}
+        placeholderTextColor={theme === "dark" ? "#B0BEC5" : "#757575"}
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
@@ -70,9 +78,9 @@ const LoginScreen = () => {
       />
 
       <TextInput
-        style={[styles.input, { color: theme === 'dark' ? '#fff' : '#000' }]}
+        style={[styles.input, { color: theme === "dark" ? "#fff" : "#000" }]}
         placeholder="Password"
-        placeholderTextColor={theme === 'dark' ? '#B0BEC5' : '#757575'}
+        placeholderTextColor={theme === "dark" ? "#B0BEC5" : "#757575"}
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -86,13 +94,22 @@ const LoginScreen = () => {
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>{isLogin ? 'Login' : 'Register'}</Text>
+          <Text style={styles.buttonText}>
+            {isLogin ? "Login" : "Register"}
+          </Text>
         )}
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
-        <Text style={[styles.switchText, { color: theme === 'dark' ? '#B0BEC5' : '#757575' }]}>
-          {isLogin ? "Don't have an account? Register" : 'Have an account? Login'}
+        <Text
+          style={[
+            styles.switchText,
+            { color: theme === "dark" ? "#B0BEC5" : "#757575" },
+          ]}
+        >
+          {isLogin
+            ? "Don't have an account? Register"
+            : "Have an account? Login"}
         </Text>
       </TouchableOpacity>
     </View>
@@ -102,40 +119,40 @@ const LoginScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     padding: 20,
   },
   title: {
     fontSize: 32,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontWeight: "bold",
+    textAlign: "center",
     marginBottom: 40,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: "#ccc",
     borderRadius: 8,
     padding: 15,
     marginBottom: 15,
     fontSize: 16,
   },
   button: {
-    backgroundColor: '#A97664',
+    backgroundColor: "#A97664",
     padding: 15,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 20,
   },
   buttonDisabled: {
     opacity: 0.5,
   },
   buttonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   switchText: {
-    textAlign: 'center',
+    textAlign: "center",
     fontSize: 14,
   },
 });

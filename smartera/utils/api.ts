@@ -1,5 +1,5 @@
 // API utility for backend communication
-export const API_BASE_URL = "http://localhost:3000/api"; // Use local backend for development
+export const API_BASE_URL = "http://172.20.10.2:3000/api"; // Use same IP as Expo server
 
 export async function apiRequest(
   endpoint: string,
@@ -11,11 +11,26 @@ export async function apiRequest(
     "Content-Type": "application/json",
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  
+  console.log(`Making request to: ${API_BASE_URL}${endpoint}`); // Debug log
+  
+  try {
+    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    
+    console.log(`Response status: ${res.status}`); // Debug log
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`API Error: ${errorText}`);
+      throw new Error(errorText);
+    }
+    return res.json();
+  } catch (error) {
+    console.error(`API Request failed: ${error}`);
+    throw error;
+  }
 }

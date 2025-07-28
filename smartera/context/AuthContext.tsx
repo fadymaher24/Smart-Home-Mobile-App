@@ -4,8 +4,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 interface AuthContextType {
   token: string | null;
   user: any | null;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (name: string, email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -20,7 +20,7 @@ export const useAuth = () => {
   return context;
 };
 
-const API_BASE_URL = "http://localhost:3000/api";
+const API_BASE_URL = "http://172.20.10.2:3000/api";
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -47,7 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<void> => {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
@@ -60,12 +60,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setToken(data.token);
         setUser(data.user);
         await AsyncStorage.setItem("token", data.token);
-        return true;
+        return; // Success - no error thrown
       }
-      return false;
+
+      const errorData = await response.text();
+      throw new Error(errorData || "Login failed");
     } catch (error) {
       console.log("Login failed:", error);
-      return false;
+      throw error; // Re-throw to be handled by LoginScreen
     }
   };
 
@@ -73,7 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     name: string,
     email: string,
     password: string
-  ): Promise<boolean> => {
+  ): Promise<void> => {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: "POST",
@@ -88,12 +90,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       if (response.ok) {
         // Auto-login after registration
-        return await login(email, password);
+        await login(email, password);
+        return; // Success
       }
-      return false;
+
+      const errorData = await response.text();
+      throw new Error(errorData || "Registration failed");
     } catch (error) {
       console.log("Registration failed:", error);
-      return false;
+      throw error; // Re-throw to be handled by LoginScreen
     }
   };
 

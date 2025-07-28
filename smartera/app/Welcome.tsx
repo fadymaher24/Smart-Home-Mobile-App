@@ -8,7 +8,7 @@ import "react-native-gesture-handler";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import Feather from "@expo/vector-icons/Feather";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Text } from "react-native";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 
@@ -184,9 +184,17 @@ const styles = StyleSheet.create({
 
 // Main app component with authentication wrapper
 function MainApp() {
-  const { user } = useAuth();
+  const { token, isLoading } = useAuth();
 
-  if (!user) {
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (!token) {
     return <LoginScreen />;
   }
 
