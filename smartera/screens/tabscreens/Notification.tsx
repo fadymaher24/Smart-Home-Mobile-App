@@ -8,6 +8,8 @@ import {
   Alert,
 } from "react-native";
 import { useTheme } from "../../context/ThemeContext";
+import { useAuth } from "../../context/AuthContext";
+import { apiRequest } from "../../utils/api";
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -105,30 +107,9 @@ const NotificationItem = ({
   );
 };
 
-// API utility for backend communication
-export const API_BASE_URL = "http://localhost:3000/api"; // Use local backend for development
-
-export async function apiRequest(
-  endpoint: string,
-  method: string = "GET",
-  body?: any,
-  token?: string
-) {
-  const headers: any = {
-    "Content-Type": "application/json",
-  };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
 export default function Notification() {
   const { theme } = useTheme();
+  const { token } = useAuth();
   const [notifications, setNotifications] = useState<
     Array<{
       id: string;
@@ -141,59 +122,94 @@ export default function Notification() {
 
   useEffect(() => {
     loadNotifications();
-  }, []);
+  }, [token]);
 
   const loadNotifications = async () => {
+    if (!token) return;
+
     try {
-      const storedNotifications = await AsyncStorage.getItem("notifications");
-      if (storedNotifications) {
-        setNotifications(JSON.parse(storedNotifications));
-      } else {
-        // Initialize with default notifications if none exist
-        const defaultNotifications = [
-          {
-            id: "1",
-            title: "High Power Usage",
-            message: "Your living room AC is consuming more power than usual",
-            time: "2m ago",
-            type: "alert" as const,
-          },
-          {
-            id: "2",
-            title: "Device Connected",
-            message: "New smart bulb connected successfully",
-            time: "15m ago",
-            type: "success" as const,
-          },
-          {
-            id: "3",
-            title: "System Update",
-            message: "New features available for your smart home",
-            time: "1h ago",
-            type: "info" as const,
-          },
-        ];
-        await AsyncStorage.setItem(
-          "notifications",
-          JSON.stringify(defaultNotifications)
-        );
-        setNotifications(defaultNotifications);
-      }
+      // Load notifications from backend
+      const backendNotifications = await apiRequest(
+        "/notifications",
+        "GET",
+        null,
+        token
+      );
+      setNotifications(
+        backendNotifications.map((notif: any) => ({
+          id: notif._id,
+          title: notif.title,
+          message: notif.message,
+          time: new Date(notif.createdAt).toLocaleTimeString(),
+          type: notif.type,
+        }))
+      );
     } catch (error) {
-      console.error("Error loading notifications:", error);
+      console.log("Failed to load notifications from backend:", error);
+
+      // Fallback to local storage
+      try {
+        const storedNotifications = await AsyncStorage.getItem("notifications");
+        if (storedNotifications) {
+          setNotifications(JSON.parse(storedNotifications));
+        } else {
+          // Initialize with default notifications if none exist
+          const defaultNotifications = [
+            {
+              id: "1",
+              title: "High Power Usage",
+              message: "Your living room AC is consuming more power than usual",
+              time: "2m ago",
+              type: "alert" as const,
+            },
+            {
+              id: "2",
+              title: "Device Connected",
+              message: "New smart bulb connected successfully",
+              time: "15m ago",
+              type: "success" as const,
+            },
+            {
+              id: "3",
+              title: "System Update",
+              message: "New features available for your smart home",
+              time: "1h ago",
+              type: "info" as const,
+            },
+          ];
+          await AsyncStorage.setItem(
+            "notifications",
+            JSON.stringify(defaultNotifications)
+          );
+          setNotifications(defaultNotifications);
+        }
+      } catch (storageError) {
+        console.error(
+          "Error loading notifications from storage:",
+          storageError
+        );
+      }
     }
   };
 
   const handleDelete = async (id: string) => {
+    if (!token) return;
+
     try {
+      // Delete from backend
+      await apiRequest(`/notifications/${id}`, "DELETE", null, token);
+
+      // Update local state
       const updatedNotifications = notifications.filter(
         (notification) => notification.id !== id
       );
+      setNotifications(updatedNotifications);
+
+      // Also update local storage as fallback
       await AsyncStorage.setItem(
         "notifications",
         JSON.stringify(updatedNotifications)
       );
-      setNotifications(updatedNotifications);
     } catch (error) {
       console.error("Error deleting notification:", error);
     }

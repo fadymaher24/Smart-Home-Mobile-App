@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../../context/ThemeContext";
-import mqttService from "../../services/mqttService";
+import { useAuth } from "../../context/AuthContext";
+import { apiRequest } from "../../utils/api";
 
 const { width } = Dimensions.get("window");
 
@@ -39,33 +40,9 @@ const QuickActionButton = ({
 };
 
 export default function Home() {
-  React.useEffect(() => {
-    mqttService.initializeClient({
-      brokerHost: "xe1521a1.ala.eu-central-1.emqxsl.com", // EMQX Cloud domain only
-      brokerPort: 8084, // EMQX Cloud WebSocket SSL port
-      clientId: `mobileApp_${Math.random().toString(36).substring(7)}`,
-      useSSL: true,
-      path: "/mqtt", // EMQX Cloud WebSocket path
-      username: "fady.iot",
-      password: "123456",
-      protocol: "mqtt",
-    });
-    console.log(
-      "[MQTT] If connection fails, check EMQX Cloud WebSocket settings, port 8084, and public access."
-    );
-  }, []);
-
   const { theme } = useTheme();
-  const isDark = theme === "dark";
-
-  const quickActions = [
-    { icon: "home", label: "All" },
-    { icon: "sun", label: "Living Room" },
-    { icon: "moon", label: "Bedroom" },
-    { icon: "coffee", label: "Kitchen" },
-  ];
-
-  const stats = [
+  const { token } = useAuth();
+  const [stats, setStats] = useState([
     { label: "Power Usage", value: "2.4 kWh", change: "-11.2%", icon: "zap" },
     {
       label: "Temperature",
@@ -74,6 +51,43 @@ export default function Home() {
       icon: "thermometer",
     },
     { label: "Devices", value: "8 Active", change: "+2", icon: "smartphone" },
+  ]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [token]);
+
+  const loadDashboardData = async () => {
+    if (!token) return;
+
+    try {
+      // Load power usage data
+      const powerUsage = await apiRequest(
+        "/power-usage/total",
+        "GET",
+        null,
+        token
+      );
+      // Load device count
+      const devices = await apiRequest("/devices", "GET", null, token);
+
+      setStats((prev) => [
+        { ...prev[0], value: `${powerUsage.totalUsage || 0} kWh` },
+        prev[1], // Keep temperature static for now
+        { ...prev[2], value: `${devices.length || 0} Active` },
+      ]);
+    } catch (error) {
+      console.log("Failed to load dashboard data:", error);
+    }
+  };
+
+  const isDark = theme === "dark";
+
+  const quickActions = [
+    { icon: "home", label: "All" },
+    { icon: "sun", label: "Living Room" },
+    { icon: "moon", label: "Bedroom" },
+    { icon: "coffee", label: "Kitchen" },
   ];
 
   return (
@@ -142,28 +156,6 @@ export default function Home() {
       </View>
     </ScrollView>
   );
-}
-
-// API utility for backend communication
-export const API_BASE_URL = "http://localhost:3000/api"; // Use local backend for development
-
-export async function apiRequest(
-  endpoint: string,
-  method: string = "GET",
-  body?: any,
-  token?: string
-) {
-  const headers: any = {
-    "Content-Type": "application/json",
-  };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
 }
 
 const styles = (colorScheme: "light" | "dark") =>

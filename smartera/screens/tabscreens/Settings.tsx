@@ -9,9 +9,11 @@ import {
   ScrollView,
   TouchableOpacity,
   useColorScheme,
+  Alert,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../../context/ThemeContext";
+import { useAuth } from "../../context/AuthContext";
 
 interface SettingItemProps {
   icon: string;
@@ -71,8 +73,16 @@ const SettingItem = ({
 
 export default function Settings() {
   const { theme, toggleTheme, isDarkMode } = useTheme();
+  const { logout } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [locationServices, setLocationServices] = useState(true);
+
+  const handleLogout = () => {
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Logout", style: "destructive", onPress: logout },
+    ]);
+  };
 
   return (
     <ScrollView style={styles(theme).container}>
@@ -152,30 +162,18 @@ export default function Settings() {
           colorScheme={theme}
         />
       </View>
+
+      <View style={styles(theme).section}>
+        <Text style={styles(theme).sectionTitle}>Account</Text>
+        <SettingItem
+          icon="log-out"
+          title="Logout"
+          onPress={handleLogout}
+          colorScheme={theme}
+        />
+      </View>
     </ScrollView>
   );
-}
-
-// API utility for backend communication
-export const API_BASE_URL = "http://localhost:3000/api"; // Use local backend for development
-
-export async function apiRequest(
-  endpoint: string,
-  method: string = "GET",
-  body?: any,
-  token?: string
-) {
-  const headers: any = {
-    "Content-Type": "application/json",
-  };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
 }
 
 const styles = (colorScheme: "light" | "dark") =>

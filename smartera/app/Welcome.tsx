@@ -10,6 +10,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import Feather from "@expo/vector-icons/Feather";
 import { View, StyleSheet } from "react-native";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
+import { AuthProvider, useAuth } from "../context/AuthContext";
 
 import Home from "../screens/tabscreens/Home";
 import Settings from "../screens/tabscreens/Settings";
@@ -17,6 +18,7 @@ import Notification from "../screens/tabscreens/Notification";
 import StackMe from "../screens/HomeStack/Stackme";
 import DevicesActive from "@/screens/tabscreens/DeviceActive";
 import PowerUsage from "../screens/tabscreens/PowerUsage";
+import LoginScreen from "../screens/LoginScreen";
 
 const HomeStack = createNativeStackNavigator();
 const drawer = createDrawerNavigator();
@@ -180,10 +182,23 @@ const styles = StyleSheet.create({
   },
 });
 
+// Main app component with authentication wrapper
+function MainApp() {
+  const { user } = useAuth();
+
+  if (!user) {
+    return <LoginScreen />;
+  }
+
+  return <TabGroup />;
+}
+
 export default function Index() {
   return (
     <ThemeProvider>
-      <TabGroup />
+      <AuthProvider>
+        <MainApp />
+      </AuthProvider>
     </ThemeProvider>
   );
 }
