@@ -9,9 +9,11 @@ import {
   ScrollView,
   TouchableOpacity,
   useColorScheme,
+  Alert,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../../context/ThemeContext";
+import { useAuth } from "../../context/AuthContext";
 
 interface SettingItemProps {
   icon: string;
@@ -71,8 +73,16 @@ const SettingItem = ({
 
 export default function Settings() {
   const { theme, toggleTheme, isDarkMode } = useTheme();
+  const { logout } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [locationServices, setLocationServices] = useState(true);
+
+  const handleLogout = () => {
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Logout", style: "destructive", onPress: logout },
+    ]);
+  };
 
   return (
     <ScrollView style={styles(theme).container}>
@@ -149,6 +159,16 @@ export default function Settings() {
           icon="info"
           title="About"
           onPress={() => {}}
+          colorScheme={theme}
+        />
+      </View>
+
+      <View style={styles(theme).section}>
+        <Text style={styles(theme).sectionTitle}>Account</Text>
+        <SettingItem
+          icon="log-out"
+          title="Logout"
+          onPress={handleLogout}
           colorScheme={theme}
         />
       </View>

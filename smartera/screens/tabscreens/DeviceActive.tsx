@@ -14,7 +14,8 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useTheme } from "../../context/ThemeContext";
-import mqttService from "../../services/mqttService";
+import { useAuth } from "../../context/AuthContext";
+import { apiRequest } from "../../utils/api";
 import QRScan from "./QRScan";
 
 interface Device {
@@ -158,95 +159,105 @@ const DeviceCard = ({
 
 const DevicesActive = () => {
   const { theme } = useTheme();
+  const { token } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [newPlugId, setNewPlugId] = useState("");
   const [newLocation, setNewLocation] = useState(locationOptions[0]);
   const [showQR, setShowQR] = useState(false);
 
+  // Load devices from backend on component mount
   useEffect(() => {
-    mqttService.onMessageCallback = (topic: string, message: string) => {
-      // Listen for status and connection events
-      const statusMatch = topic.match(/^smartplug\/(.+)\/status$/);
-      const connMatch = topic.match(/^smartplug\/(.+)\/connection$/);
-      if (statusMatch) {
-        const plugId = statusMatch[1];
-        setDevices((prev) =>
-          prev.map((d) =>
-            d.id === plugId
-              ? { ...d, status: message === "ON" ? "Active" : "Inactive" }
-              : d
-          )
-        );
-      } else if (connMatch) {
-        const plugId = connMatch[1];
-        setDevices((prev) =>
-          prev.map((d) =>
-            d.id === plugId
-              ? {
-                  ...d,
-                  status: message === "CONNECTED" ? "Active" : "Disconnected",
-                }
-              : d
-          )
-        );
-      }
-    };
-    return () => {
-      mqttService.onMessageCallback = null;
-    };
-  }, [devices]);
-
-  const handleAddPlug = () => {
-    if (!newPlugId) return;
-    setDevices((prev) => [
-      ...prev,
-      {
-        id: newPlugId,
-        type: "Smart Plug",
-        location: newLocation,
-        status: "Inactive",
-        icon: require("../../assets/icons/lamp.png"),
-      },
-    ]);
-    setModalVisible(false);
-    setNewPlugId("");
-    setNewLocation(locationOptions[0]);
-
-    // Set plugId in mqttService and subscribe to topics
-    mqttService.setPlugId(newPlugId);
-
-    // Only connect if not already connected
-    if (mqttService.client && !mqttService.client.isConnected()) {
-      console.log("[MQTT] Attempting to connect after adding plug...");
-      mqttService.connect(
-        () => console.log(`[MQTT] Connected after adding plug ${newPlugId}`),
-        (err) => console.log(`[MQTT] Connection error after adding plug:`, err)
-      );
-    } else if (mqttService.client && mqttService.client.isConnected()) {
-      console.log(`[MQTT] Already connected after adding plug ${newPlugId}`);
-    } else {
-      console.log("[MQTT] Client not initialized after adding plug.");
+    if (token) {
+      loadDevices();
     }
+  }, [token]);
 
-    // Trace what is sent to the broker
-    console.log(`[MQTT] Subscribed to plug topics for ${newPlugId}`);
+  const loadDevices = async () => {
+    if (!token) return;
+
+    try {
+      const deviceList = await apiRequest("/devices", "GET", undefined, token);
+
+      // Transform backend device format to UI format
+      const transformedDevices = deviceList.map((device: any) => ({
+        id: device.deviceId,
+        type: device.type || "Smart Plug",
+        location: device.location || "Unknown",
+        status: device.status === "ON" ? "Active" : "Inactive",
+        icon: require("../../assets/icons/lamp.png"),
+      }));
+
+      setDevices(transformedDevices);
+    } catch (error) {
+      console.log("Failed to load devices:", error);
+      // Fallback to empty array or show error
+    }
   };
 
-  const handleControl = (id: string, action: string) => {
-    // Publish to the correct topic for plug control
-    const topic = `smartplug/${id}/command`;
-    console.log(`[MQTT] Sending control: ${topic} -> ${action}`);
-    mqttService.publish(topic, action);
-    Alert.alert("Sent", `Sent ${action} to plug ${id}`);
-    // Optimistically update device status in UI
-    setDevices((prev) =>
-      prev.map((d) =>
-        d.id === id
-          ? { ...d, status: action === "turnOn" ? "Active" : "Inactive" }
-          : d
-      )
-    );
+  const handleAddPlug = async () => {
+    if (!newPlugId || !token) return;
+
+    try {
+      // Call backend API to add device
+      const response = await apiRequest(
+        "/devices",
+        "POST",
+        {
+          id: newPlugId,
+          type: "Smart Plug",
+          location: newLocation,
+        },
+        token
+      );
+
+      // Add to local state
+      setDevices((prev) => [
+        ...prev,
+        {
+          id: newPlugId,
+          type: "Smart Plug",
+          location: newLocation,
+          status: "Inactive",
+          icon: require("../../assets/icons/lamp.png"),
+        },
+      ]);
+
+      setModalVisible(false);
+      setNewPlugId("");
+      setNewLocation(locationOptions[0]);
+
+      Alert.alert("Success", `Device ${newPlugId} added successfully`);
+    } catch (error) {
+      console.log("Failed to add device:", error);
+      Alert.alert("Error", "Failed to add device");
+    }
+  };
+
+  const handleControl = async (id: string, action: string) => {
+    if (!token) return;
+
+    try {
+      // Call backend API to control device
+      await apiRequest(`/devices/${id}/control`, "POST", { action }, token);
+
+      // Optimistically update device status in UI
+      setDevices((prev) =>
+        prev.map((d) =>
+          d.id === id
+            ? { ...d, status: action === "turnOn" ? "Active" : "Inactive" }
+            : d
+        )
+      );
+
+      Alert.alert(
+        "Success",
+        `Device ${id} ${action === "turnOn" ? "turned on" : "turned off"}`
+      );
+    } catch (error) {
+      console.log("Failed to control device:", error);
+      Alert.alert("Error", "Failed to control device");
+    }
   };
 
   return (

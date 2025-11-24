@@ -1,7 +1,9 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { StyleSheet, Text, View, ScrollView, Dimensions } from "react-native";
 import { LineChart } from "react-native-chart-kit";
 import { useTheme } from "../../context/ThemeContext";
+import { useAuth } from "../../context/AuthContext";
+import { apiRequest } from "../../utils/api";
 import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 
 interface UsageItemProps {
@@ -63,13 +65,64 @@ const UsageItem = ({
 
 export default function PowerUsage() {
   const { theme } = useTheme();
+  const { token } = useAuth();
   const isDark = theme === "dark";
+
+  const [powerData, setPowerData] = useState({
+    weeklyUsage: 2500,
+    dailyAverage: 350,
+    peakUsage: 520,
+    totalCost: 45.2,
+    chartData: [100, 140, 220, 120, 80, 100, 140],
+    recentUsage: [],
+  });
+
+  useEffect(() => {
+    loadPowerUsageData();
+  }, [token]);
+
+  const loadPowerUsageData = async () => {
+    if (!token) return;
+
+    try {
+      // Load power usage statistics
+      const weeklyData = await apiRequest(
+        "/power-usage/weekly",
+        "GET",
+        null,
+        token
+      );
+      const totalData = await apiRequest(
+        "/power-usage/total",
+        "GET",
+        null,
+        token
+      );
+      const recentData = await apiRequest(
+        "/power-usage/recent",
+        "GET",
+        null,
+        token
+      );
+
+      setPowerData({
+        weeklyUsage: weeklyData.totalUsage || 2500,
+        dailyAverage: Math.round((weeklyData.totalUsage || 2500) / 7),
+        peakUsage: weeklyData.peakUsage || 520,
+        totalCost: (weeklyData.totalUsage || 2500) * 0.018, // $0.018 per watt
+        chartData: weeklyData.dailyData || [100, 140, 220, 120, 80, 100, 140],
+        recentUsage: recentData || [],
+      });
+    } catch (error) {
+      console.log("Failed to load power usage data:", error);
+    }
+  };
 
   const data = {
     labels: ["Mon", "Tues", "Wed", "Thurs", "Fri", "Sat", "Sun"],
     datasets: [
       {
-        data: [100, 140, 220, 120, 80, 100, 140],
+        data: powerData.chartData,
         color: (opacity = 1) =>
           isDark
             ? `rgba(76, 175, 80, ${opacity})`
@@ -104,7 +157,9 @@ export default function PowerUsage() {
         <Text style={[styles(theme).headerTitle]}>Power Usage</Text>
         <View style={styles(theme).usageWeek}>
           <Text style={styles(theme).usageLabel}>Usage this Week</Text>
-          <Text style={[styles(theme).usageValue]}>2500 watt</Text>
+          <Text style={[styles(theme).usageValue]}>
+            {powerData.weeklyUsage} watt
+          </Text>
         </View>
       </View>
 
@@ -125,15 +180,17 @@ export default function PowerUsage() {
       <View style={styles(theme).statsContainer}>
         <View style={styles(theme).statCard}>
           <Text style={styles(theme).statLabel}>Daily Average</Text>
-          <Text style={styles(theme).statValue}>350W</Text>
+          <Text style={styles(theme).statValue}>{powerData.dailyAverage}W</Text>
         </View>
         <View style={styles(theme).statCard}>
           <Text style={styles(theme).statLabel}>Peak Usage</Text>
-          <Text style={styles(theme).statValue}>520W</Text>
+          <Text style={styles(theme).statValue}>{powerData.peakUsage}W</Text>
         </View>
         <View style={styles(theme).statCard}>
           <Text style={styles(theme).statLabel}>Total Cost</Text>
-          <Text style={styles(theme).statValue}>$45.20</Text>
+          <Text style={styles(theme).statValue}>
+            ${powerData.totalCost.toFixed(2)}
+          </Text>
         </View>
       </View>
 

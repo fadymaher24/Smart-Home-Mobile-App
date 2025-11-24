@@ -11,6 +11,28 @@ import {
   ActivityIndicator,
 } from "react-native";
 
+// API utility for backend communication
+export const API_BASE_URL = "http://localhost:3000/api"; // Use local backend for development
+
+export async function apiRequest(
+  endpoint: string,
+  method: string = "GET",
+  body?: any,
+  token?: string
+) {
+  const headers: any = {
+    "Content-Type": "application/json",
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export default function QRScan({
   onScanned,
   onCancel,
@@ -32,7 +54,9 @@ export default function QRScan({
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#A97664" />
-        <Text style={{ color: '#fff', marginTop: 16 }}>Checking camera permissions...</Text>
+        <Text style={{ color: "#fff", marginTop: 16 }}>
+          Checking camera permissions...
+        </Text>
       </View>
     );
   }
@@ -40,7 +64,7 @@ export default function QRScan({
   if (!permission.granted) {
     return (
       <View style={styles.centered}>
-        <Text style={{ marginBottom: 16, color: '#fff' }}>
+        <Text style={{ marginBottom: 16, color: "#fff" }}>
           Camera permission is required to scan QR codes.
           {Platform.OS === "ios" &&
             "\nGo to Settings > Privacy > Camera to enable."}
@@ -59,11 +83,17 @@ export default function QRScan({
   }
 
   // CameraView fallback for camera not available
-  if (permission.granted && typeof CameraView !== 'function') {
+  if (permission.granted && typeof CameraView !== "function") {
     return (
       <View style={styles.centered}>
-        <Text style={{ color: '#fff' }}>Camera is not available on this device or Expo Go. Try on a real device with a production build.</Text>
-        <TouchableOpacity onPress={onCancel} style={[styles.button, { marginTop: 16 }]}> 
+        <Text style={{ color: "#fff" }}>
+          Camera is not available on this device or Expo Go. Try on a real
+          device with a production build.
+        </Text>
+        <TouchableOpacity
+          onPress={onCancel}
+          style={[styles.button, { marginTop: 16 }]}
+        >
           <Text style={{ color: "#fff" }}>Cancel</Text>
         </TouchableOpacity>
       </View>
