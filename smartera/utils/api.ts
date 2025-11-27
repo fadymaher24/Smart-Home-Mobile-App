@@ -1,5 +1,5 @@
 // API utility for backend communication
-export const API_BASE_URL = "http://172.20.10.2:3000/api"; // Use same IP as Expo server
+export const API_BASE_URL = "http://192.168.1.57:3000/api"; // Use same IP as Expo server
 
 export async function apiRequest(
   endpoint: string,
@@ -34,3 +34,4 @@ export async function apiRequest(
     throw error;
   }
 }
+

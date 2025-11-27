@@ -6,14 +6,24 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
-import { apiRequest } from "../../utils/api";
+import { useDevices, usePowerUsage, useRealtimeConnection } from "../../hooks/useDeviceData";
 
 const { width } = Dimensions.get("window");
+
+// Helper to get time-based greeting
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  return "Good Evening";
+};
 
 const QuickActionButton = ({
   icon,
@@ -41,47 +51,48 @@ const QuickActionButton = ({
 
 export default function Home() {
   const { theme } = useTheme();
-  const { token } = useAuth();
-  const [stats, setStats] = useState([
-    { label: "Power Usage", value: "2.4 kWh", change: "-11.2%", icon: "zap" },
-    {
-      label: "Temperature",
-      value: "24°C",
-      change: "+2.1°C",
-      icon: "thermometer",
+  const { user } = useAuth();
+  const { isConnected: wsConnected } = useRealtimeConnection();
+  const { devices, loading: devicesLoading, refresh: refreshDevices } = useDevices();
+  const { stats: powerStats, loading: powerLoading, refresh: refreshPower } = usePowerUsage();
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Calculate stats from real data
+  const activeDevices = devices.filter(d => d.status === 'online').length;
+  const totalPower = devices.reduce((sum, d) => sum + (d.lastTelemetry?.power || 0), 0);
+  
+  const stats = [
+    { 
+      label: "Power Usage", 
+      value: powerStats?.totalUsage 
+        ? `${(powerStats.totalUsage / 1000).toFixed(2)} kWh` 
+        : `${totalPower.toFixed(1)} W`,
+      change: powerStats?.totalUsage ? "-11.2%" : "Live",
+      icon: "zap" 
     },
-    { label: "Devices", value: "8 Active", change: "+2", icon: "smartphone" },
-  ]);
+    {
+      label: "Active Now",
+      value: `${totalPower.toFixed(0)}W`,
+      change: wsConnected ? "Live" : "Offline",
+      icon: "activity",
+    },
+    { 
+      label: "Devices", 
+      value: `${activeDevices}/${devices.length}`, 
+      change: `${activeDevices} Online`, 
+      icon: "smartphone" 
+    },
+  ];
 
-  useEffect(() => {
-    loadDashboardData();
-  }, [token]);
-
-  const loadDashboardData = async () => {
-    if (!token) return;
-
-    try {
-      // Load power usage data
-      const powerUsage = await apiRequest(
-        "/power-usage/total",
-        "GET",
-        null,
-        token
-      );
-      // Load device count
-      const devices = await apiRequest("/devices", "GET", null, token);
-
-      setStats((prev) => [
-        { ...prev[0], value: `${powerUsage.totalUsage || 0} kWh` },
-        prev[1], // Keep temperature static for now
-        { ...prev[2], value: `${devices.length || 0} Active` },
-      ]);
-    } catch (error) {
-      console.log("Failed to load dashboard data:", error);
-    }
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([refreshDevices(), refreshPower()]);
+    setRefreshing(false);
   };
 
   const isDark = theme === "dark";
+  const greeting = getGreeting();
+  const userName = user?.name || user?.email?.split('@')[0] || 'User';
 
   const quickActions = [
     { icon: "home", label: "All" },
@@ -91,20 +102,37 @@ export default function Home() {
   ];
 
   return (
-    <ScrollView style={styles(theme).container}>
+    <ScrollView 
+      style={styles(theme).container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+      }
+    >
       {/* Header Section */}
       <View style={styles(theme).headerContainer}>
         <View>
-          <Text style={styles(theme).greeting}>Good Morning,</Text>
-          <Text style={styles(theme).username}>Fady Maher</Text>
+          <Text style={styles(theme).greeting}>{greeting},</Text>
+          <Text style={styles(theme).username}>{userName}</Text>
         </View>
-        <TouchableOpacity style={styles(theme).profileButton}>
-          <Feather
-            name="user"
-            size={24}
-            color={isDark ? "#ffffff" : "#000000"}
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {/* Connection indicator */}
+          <View
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: 5,
+              backgroundColor: wsConnected ? "#4CAF50" : "#FF5252",
+              marginRight: 12,
+            }}
           />
-        </TouchableOpacity>
+          <TouchableOpacity style={styles(theme).profileButton}>
+            <Feather
+              name="user"
+              size={24}
+              color={isDark ? "#ffffff" : "#000000"}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Quick Actions */}
@@ -128,31 +156,43 @@ export default function Home() {
       {/* Stats Grid */}
       <View style={styles(theme).section}>
         <Text style={styles(theme).sectionTitle}>Today's Overview</Text>
-        <View style={styles(theme).statsGrid}>
-          {stats.map((stat, index) => (
-            <View key={index} style={styles(theme).statCard}>
-              <View style={styles(theme).statHeader}>
-                <Feather
-                  name={stat.icon as any}
-                  size={24}
-                  color={isDark ? "#4CAF50" : "#4775EA"}
-                />
-                <Text
-                  style={[
-                    styles(theme).statChange,
-                    {
-                      color: stat.change.includes("+") ? "#4CAF50" : "#FF5252",
-                    },
-                  ]}
-                >
-                  {stat.change}
-                </Text>
+        {(devicesLoading || powerLoading) && devices.length === 0 ? (
+          <View style={{ padding: 20, alignItems: 'center' }}>
+            <ActivityIndicator size="small" color="#A97664" />
+          </View>
+        ) : (
+          <View style={styles(theme).statsGrid}>
+            {stats.map((stat, index) => (
+              <View key={index} style={styles(theme).statCard}>
+                <View style={styles(theme).statHeader}>
+                  <Feather
+                    name={stat.icon as any}
+                    size={24}
+                    color={isDark ? "#4CAF50" : "#4775EA"}
+                  />
+                  <Text
+                    style={[
+                      styles(theme).statChange,
+                      {
+                        color: stat.change === "Live" 
+                          ? "#4CAF50" 
+                          : stat.change === "Offline"
+                          ? "#FF5252"
+                          : stat.change.includes("+") 
+                          ? "#4CAF50" 
+                          : "#FF5252",
+                      },
+                    ]}
+                  >
+                    {stat.change}
+                  </Text>
+                </View>
+                <Text style={styles(theme).statValue}>{stat.value}</Text>
+                <Text style={styles(theme).statLabel}>{stat.label}</Text>
               </View>
-              <Text style={styles(theme).statValue}>{stat.value}</Text>
-              <Text style={styles(theme).statLabel}>{stat.label}</Text>
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
       </View>
     </ScrollView>
   );

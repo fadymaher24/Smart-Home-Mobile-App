@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, Text, View, ScrollView, Dimensions } from "react-native";
+import { StyleSheet, Text, View, ScrollView, Dimensions, RefreshControl, ActivityIndicator } from "react-native";
 import { LineChart } from "react-native-chart-kit";
 import { useTheme } from "../../context/ThemeContext";
-import { useAuth } from "../../context/AuthContext";
-import { apiRequest } from "../../utils/api";
+import { usePowerUsage, useDevices, useRealtimeConnection } from "../../hooks/useDeviceData";
 import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 
 interface UsageItemProps {
@@ -65,64 +64,36 @@ const UsageItem = ({
 
 export default function PowerUsage() {
   const { theme } = useTheme();
-  const { token } = useAuth();
+  const { isConnected: wsConnected } = useRealtimeConnection();
+  const { stats: powerStats, weeklyData, loading, refresh } = usePowerUsage();
+  const { devices } = useDevices();
+  const [refreshing, setRefreshing] = useState(false);
   const isDark = theme === "dark";
 
-  const [powerData, setPowerData] = useState({
-    weeklyUsage: 2500,
-    dailyAverage: 350,
-    peakUsage: 520,
-    totalCost: 45.2,
-    chartData: [100, 140, 220, 120, 80, 100, 140],
-    recentUsage: [],
-  });
+  // Calculate real-time power from devices
+  const currentPower = devices.reduce((sum, d) => sum + (d.lastTelemetry?.power || 0), 0);
+  const totalEnergy = devices.reduce((sum, d) => sum + (d.lastTelemetry?.energy || 0), 0);
 
-  useEffect(() => {
-    loadPowerUsageData();
-  }, [token]);
+  // Use real data or fallback to defaults
+  const weeklyUsage = powerStats?.weeklyUsage || totalEnergy * 1000 || 0;
+  const dailyAverage = powerStats?.todayUsage || Math.round(weeklyUsage / 7);
+  const peakUsage = powerStats?.currentPower || currentPower || 0;
+  // cost is an object with today, weekly, monthly - extract weekly or calculate
+  const totalCost = typeof powerStats?.cost === 'object' 
+    ? (powerStats.cost?.weekly || 0) 
+    : (typeof powerStats?.cost === 'number' ? powerStats.cost : weeklyUsage * 0.00018); // $0.18 per kWh
 
-  const loadPowerUsageData = async () => {
-    if (!token) return;
-
-    try {
-      // Load power usage statistics
-      const weeklyData = await apiRequest(
-        "/power-usage/weekly",
-        "GET",
-        null,
-        token
-      );
-      const totalData = await apiRequest(
-        "/power-usage/total",
-        "GET",
-        null,
-        token
-      );
-      const recentData = await apiRequest(
-        "/power-usage/recent",
-        "GET",
-        null,
-        token
-      );
-
-      setPowerData({
-        weeklyUsage: weeklyData.totalUsage || 2500,
-        dailyAverage: Math.round((weeklyData.totalUsage || 2500) / 7),
-        peakUsage: weeklyData.peakUsage || 520,
-        totalCost: (weeklyData.totalUsage || 2500) * 0.018, // $0.018 per watt
-        chartData: weeklyData.dailyData || [100, 140, 220, 120, 80, 100, 140],
-        recentUsage: recentData || [],
-      });
-    } catch (error) {
-      console.log("Failed to load power usage data:", error);
-    }
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
   };
 
   const data = {
     labels: ["Mon", "Tues", "Wed", "Thurs", "Fri", "Sat", "Sun"],
     datasets: [
       {
-        data: powerData.chartData,
+        data: weeklyData.data.length > 0 ? weeklyData.data : [0, 0, 0, 0, 0, 0, 0],
         color: (opacity = 1) =>
           isDark
             ? `rgba(76, 175, 80, ${opacity})`
@@ -151,48 +122,100 @@ export default function PowerUsage() {
     },
   };
 
+  // Build device usage items from real telemetry
+  const deviceUsageItems = devices
+    .filter(d => d.lastTelemetry)
+    .slice(0, 4)
+    .map(device => ({
+      id: device.deviceId,
+      title: device.name || device.type,
+      location: device.location,
+      power: device.lastTelemetry?.power || 0,
+      energy: device.lastTelemetry?.energy || 0,
+      status: device.status,
+    }));
+
   return (
-    <ScrollView style={styles(theme).container}>
+    <ScrollView 
+      style={styles(theme).container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+      }
+    >
       <View style={styles(theme).header}>
-        <Text style={[styles(theme).headerTitle]}>Power Usage</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={[styles(theme).headerTitle]}>Power Usage</Text>
+          {/* Live indicator */}
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: wsConnected ? "#4CAF50" : "#FF5252",
+                marginRight: 6,
+              }}
+            />
+            <Text style={{ color: wsConnected ? "#4CAF50" : "#FF5252", fontSize: 12 }}>
+              {wsConnected ? "Live" : "Offline"}
+            </Text>
+          </View>
+        </View>
+        
+        {/* Current Power Reading */}
         <View style={styles(theme).usageWeek}>
-          <Text style={styles(theme).usageLabel}>Usage this Week</Text>
+          <Text style={styles(theme).usageLabel}>Current Power</Text>
           <Text style={[styles(theme).usageValue]}>
-            {powerData.weeklyUsage} watt
+            {currentPower.toFixed(1)} W
+          </Text>
+        </View>
+        
+        <View style={[styles(theme).usageWeek, { marginTop: 8 }]}>
+          <Text style={styles(theme).usageLabel}>Total Energy This Week</Text>
+          <Text style={[styles(theme).usageValue]}>
+            {(weeklyUsage / 1000).toFixed(2)} kWh
           </Text>
         </View>
       </View>
 
-      <View style={styles(theme).chartContainer}>
-        <LineChart
-          data={data}
-          width={Dimensions.get("window").width - 32}
-          height={220}
-          chartConfig={chartConfig}
-          bezier
-          style={{
-            marginVertical: 8,
-            borderRadius: 16,
-          }}
-        />
-      </View>
+      {loading && devices.length === 0 ? (
+        <View style={{ padding: 40, alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#A97664" />
+        </View>
+      ) : (
+        <>
+          <View style={styles(theme).chartContainer}>
+            <LineChart
+              data={data}
+              width={Dimensions.get("window").width - 32}
+              height={220}
+              chartConfig={chartConfig}
+              bezier
+              style={{
+                marginVertical: 8,
+                borderRadius: 16,
+              }}
+            />
+          </View>
 
-      <View style={styles(theme).statsContainer}>
-        <View style={styles(theme).statCard}>
-          <Text style={styles(theme).statLabel}>Daily Average</Text>
-          <Text style={styles(theme).statValue}>{powerData.dailyAverage}W</Text>
-        </View>
-        <View style={styles(theme).statCard}>
-          <Text style={styles(theme).statLabel}>Peak Usage</Text>
-          <Text style={styles(theme).statValue}>{powerData.peakUsage}W</Text>
-        </View>
-        <View style={styles(theme).statCard}>
-          <Text style={styles(theme).statLabel}>Total Cost</Text>
-          <Text style={styles(theme).statValue}>
-            ${powerData.totalCost.toFixed(2)}
-          </Text>
-        </View>
-      </View>
+          <View style={styles(theme).statsContainer}>
+            <View style={styles(theme).statCard}>
+              <Text style={styles(theme).statLabel}>Daily Average</Text>
+              <Text style={styles(theme).statValue}>{(Number(dailyAverage) || 0).toFixed(0)}W</Text>
+            </View>
+            <View style={styles(theme).statCard}>
+              <Text style={styles(theme).statLabel}>Peak Usage</Text>
+              <Text style={styles(theme).statValue}>{(Number(peakUsage) || 0).toFixed(0)}W</Text>
+            </View>
+            <View style={styles(theme).statCard}>
+              <Text style={styles(theme).statLabel}>Est. Cost</Text>
+              <Text style={styles(theme).statValue}>
+                ${(Number(totalCost) || 0).toFixed(2)}
+              </Text>
+            </View>
+          </View>
+        </>
+      )}
 
       <View style={styles(theme).todayContainer}>
         <View style={styles(theme).todayHeader}>
@@ -202,74 +225,67 @@ export default function PowerUsage() {
               { color: theme === "dark" ? "#fff" : "#000" },
             ]}
           >
-            Total Today
+            Device Usage
           </Text>
           <Text style={styles(theme).seeAll}>See All</Text>
         </View>
 
-        <UsageItem
-          icon={
-            <MaterialCommunityIcons
-              name="lightbulb-outline"
-              size={24}
-              color={theme === "dark" ? "#fff" : "#000"}
+        {/* Real device usage from telemetry */}
+        {deviceUsageItems.length > 0 ? (
+          deviceUsageItems.map((item) => (
+            <UsageItem
+              key={item.id}
+              icon={
+                <MaterialCommunityIcons
+                  name="power-plug"
+                  size={24}
+                  color={item.status === 'online' ? "#4CAF50" : theme === "dark" ? "#fff" : "#000"}
+                />
+              }
+              title={item.title}
+              location={item.location}
+              usage={`${item.power.toFixed(1)} W`}
+              time={item.status === 'online' ? "Now" : "Offline"}
+              percentage={item.energy > 0 ? `${item.energy.toFixed(2)} kWh` : "-"}
+              colorScheme={theme}
             />
-          }
-          title="Lamp"
-          location="Kitchen - Bedroom"
-          usage="1000 Kw/h"
-          time="12 Jan"
-          percentage="-11.2%"
-          colorScheme={theme}
-        />
+          ))
+        ) : (
+          <>
+            {/* Fallback static items when no real data */}
+            <UsageItem
+              icon={
+                <MaterialCommunityIcons
+                  name="lightbulb-outline"
+                  size={24}
+                  color={theme === "dark" ? "#fff" : "#000"}
+                />
+              }
+              title="Lamp"
+              location="Kitchen - Bedroom"
+              usage="0 W"
+              time="No data"
+              percentage="-"
+              colorScheme={theme}
+            />
 
-        <UsageItem
-          icon={
-            <MaterialCommunityIcons
-              name="air-conditioner"
-              size={24}
-              color={theme === "dark" ? "#fff" : "#000"}
+            <UsageItem
+              icon={
+                <MaterialCommunityIcons
+                  name="air-conditioner"
+                  size={24}
+                  color={theme === "dark" ? "#fff" : "#000"}
+                />
+              }
+              title="Air Conditioner"
+              location="Living Room"
+              usage="0 W"
+              time="No data"
+              percentage="-"
+              colorScheme={theme}
             />
-          }
-          title="Air Conditioner"
-          location="Kitchen - Living Room"
-          usage="1000 Kw/h"
-          time="12 Jan"
-          percentage="-10.2%"
-          colorScheme={theme}
-        />
-
-        <UsageItem
-          icon={
-            <Feather
-              name="speaker"
-              size={24}
-              color={theme === "dark" ? "#fff" : "#000"}
-            />
-          }
-          title="Wireless Speaker"
-          location="Bedroom"
-          usage="1090 Kw/h"
-          time="3 Jan"
-          percentage="+10.2%"
-          colorScheme={theme}
-        />
-
-        <UsageItem
-          icon={
-            <MaterialCommunityIcons
-              name="television"
-              size={24}
-              color={theme === "dark" ? "#fff" : "#000"}
-            />
-          }
-          title="Television"
-          location="Living Room"
-          usage="1000 Kw/h"
-          time="12 Jan"
-          percentage="-100.2%"
-          colorScheme={theme}
-        />
+          </>
+        )}
       </View>
     </ScrollView>
   );
