@@ -148,7 +148,7 @@ export function useDevices() {
 // Hook for fetching rooms
 export function useRooms() {
   const { token } = useAuth();
-  const [rooms, setRooms] = useState<{ id: number; name: string }[]>([]);
+  const [rooms, setRooms] = useState<{ roomId: number; name: string; icon?: string }[]>([]);
   const [loading, setLoading] = useState(false);
 
   const loadRooms = useCallback(async () => {
@@ -263,12 +263,12 @@ export function useDevice(deviceId: string | number) {
     return () => clearInterval(interval);
   }, [token, deviceId]);
 
-  const control = useCallback(async (action: 'on' | 'off') => {
+  const control = useCallback(async (action: 'turnOn' | 'turnOff') => {
     if (!token || !deviceId) return;
 
     try {
       await deviceService.controlDevice(deviceId, action, token);
-      setDevice(prev => prev ? { ...prev, powerState: action === 'on' } : null);
+      setDevice(prev => prev ? { ...prev, powerState: action === 'turnOn' } : null);
       return true;
     } catch (err: any) {
       console.error('Failed to control device:', err);

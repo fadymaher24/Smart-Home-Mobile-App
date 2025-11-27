@@ -100,7 +100,7 @@ export const deviceService = {
   },
 
   // Get all rooms for the user (GET /api/room)
-  async getRooms(token: string): Promise<{ id: number; name: string }[]> {
+  async getRooms(token: string): Promise<{ roomId: number; name: string; icon?: string }[]> {
     try {
       const response = await apiRequest('/room', 'GET', undefined, token);
       return response.rooms || response || [];

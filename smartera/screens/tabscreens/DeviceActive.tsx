@@ -25,9 +25,11 @@ import { MaterialCommunityIcons, Ionicons, Feather } from "@expo/vector-icons";
 // Device types matching backend
 type DeviceType = 'SMART_PLUG' | 'RGB_LIGHT' | 'THERMOSTAT' | 'SENSOR';
 
+// Room type matching backend model
 interface Room {
-  id: number;
+  roomId: number;
   name: string;
+  icon?: string;
 }
 
 interface DeviceTypeOption {
@@ -428,7 +430,92 @@ const AddDeviceModal = ({
     </View>
   );
 
+  // Step 3: Room Selection
   const renderStep3 = () => (
+    <View style={styles.stepContainer}>
+      <Text style={[styles.stepTitle, { color: isDark ? '#fff' : '#333' }]}>
+        Select Room
+      </Text>
+      <Text style={[styles.stepSubtitle, { color: isDark ? '#888' : '#666' }]}>
+        Choose which room this device belongs to
+      </Text>
+
+      <View style={styles.roomsGrid}>
+        {/* No Room Option */}
+        <TouchableOpacity
+          style={[
+            styles.roomCard,
+            {
+              backgroundColor: !selectedRoomId
+                ? 'rgba(76, 175, 80, 0.2)'
+                : isDark ? '#1a1a1a' : '#f5f5f5',
+              borderColor: !selectedRoomId ? '#4CAF50' : 'transparent',
+              borderWidth: 2,
+            },
+          ]}
+          onPress={() => setSelectedRoomId(null)}
+        >
+          <View style={[styles.roomIconContainer, { backgroundColor: '#9E9E9E' }]}>
+            <MaterialCommunityIcons name="home-outline" size={28} color="#fff" />
+          </View>
+          <Text style={[styles.roomName, { color: isDark ? '#fff' : '#333' }]}>
+            No Room
+          </Text>
+          {!selectedRoomId && (
+            <View style={styles.roomCheckmark}>
+              <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {/* Room Options */}
+        {rooms.map((room) => (
+          <TouchableOpacity
+            key={room.roomId}
+            style={[
+              styles.roomCard,
+              {
+                backgroundColor: selectedRoomId === room.roomId
+                  ? 'rgba(76, 175, 80, 0.2)'
+                  : isDark ? '#1a1a1a' : '#f5f5f5',
+                borderColor: selectedRoomId === room.roomId ? '#4CAF50' : 'transparent',
+                borderWidth: 2,
+              },
+            ]}
+            onPress={() => setSelectedRoomId(room.roomId)}
+          >
+            <View style={[styles.roomIconContainer, { backgroundColor: '#2196F3' }]}>
+              <MaterialCommunityIcons name={(room.icon || 'door') as any} size={28} color="#fff" />
+            </View>
+            <Text style={[styles.roomName, { color: isDark ? '#fff' : '#333' }]}>
+              {room.name}
+            </Text>
+            {selectedRoomId === room.roomId && (
+              <View style={styles.roomCheckmark}>
+                <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+              </View>
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {rooms.length === 0 && (
+        <View style={styles.noRoomsMessage}>
+          <MaterialCommunityIcons 
+            name="home-alert" 
+            size={48} 
+            color={isDark ? '#555' : '#ccc'} 
+          />
+          <Text style={[styles.noRoomsText, { color: isDark ? '#888' : '#666' }]}>
+            No rooms configured yet.{'\n'}You can add the device without a room.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+
+  // Step 4: Name Your Device
+  const renderStep4 = () => (
     <View style={styles.stepContainer}>
       <Text style={[styles.stepTitle, { color: isDark ? '#fff' : '#333' }]}>
         Name Your Device
@@ -475,6 +562,11 @@ const AddDeviceModal = ({
             <Text style={styles.previewSerial}>{serialNumber}</Text>
             <Text style={styles.previewType}>
               {DEVICE_TYPES.find(t => t.type === selectedType)?.label}
+            </Text>
+            <Text style={styles.previewRoom}>
+              {selectedRoomId 
+                ? rooms.find(r => r.roomId === selectedRoomId)?.name || 'Unknown Room'
+                : 'No Room'}
             </Text>
           </View>
         </LinearGradient>
@@ -524,7 +616,7 @@ const AddDeviceModal = ({
             </TouchableOpacity>
             
             <View style={styles.stepIndicator}>
-              {[1, 2, 3].map((s) => (
+              {[1, 2, 3, 4].map((s) => (
                 <View
                   key={s}
                   style={[
@@ -550,6 +642,7 @@ const AddDeviceModal = ({
             {step === 1 && renderStep1()}
             {step === 2 && renderStep2()}
             {step === 3 && renderStep3()}
+            {step === 4 && renderStep4()}
           </ScrollView>
 
           {/* Footer */}
@@ -561,7 +654,8 @@ const AddDeviceModal = ({
                   backgroundColor: (
                     (step === 1 && selectedType) ||
                     (step === 2 && serialNumber.trim()) ||
-                    (step === 3 && deviceName.trim())
+                    (step === 3) || // Room selection is always valid (can skip)
+                    (step === 4 && deviceName.trim())
                   ) ? '#4CAF50' : '#888',
                 },
               ]}
@@ -569,7 +663,7 @@ const AddDeviceModal = ({
               disabled={loading || (
                 (step === 1 && !selectedType) ||
                 (step === 2 && !serialNumber.trim()) ||
-                (step === 3 && !deviceName.trim())
+                (step === 4 && !deviceName.trim())
               )}
             >
               {loading ? (
@@ -577,7 +671,7 @@ const AddDeviceModal = ({
               ) : (
                 <>
                   <Text style={styles.nextButtonText}>
-                    {step === 3 ? 'Add Device' : 'Continue'}
+                    {step === 4 ? 'Add Device' : 'Continue'}
                   </Text>
                   <Ionicons name="arrow-forward" size={20} color="#fff" />
                 </>
@@ -723,12 +817,6 @@ const DeviceDetailsModal = ({
                   <Text style={[styles.infoLabel, { color: isDark ? '#888' : '#666' }]}>Serial Number</Text>
                   <Text style={[styles.infoValue, { color: isDark ? '#fff' : '#333' }]}>{device.serialNumber}</Text>
                 </View>
-                {device.firmwareVersion && (
-                  <View style={styles.infoRow}>
-                    <Text style={[styles.infoLabel, { color: isDark ? '#888' : '#666' }]}>Firmware</Text>
-                    <Text style={[styles.infoValue, { color: isDark ? '#fff' : '#333' }]}>{device.firmwareVersion}</Text>
-                  </View>
-                )}
                 {device.lastSeenAt && (
                   <View style={styles.infoRow}>
                     <Text style={[styles.infoLabel, { color: isDark ? '#888' : '#666' }]}>Last Seen</Text>
@@ -788,6 +876,7 @@ export default function DeviceActive() {
     addDevice,
     removeDevice,
   } = useDevices();
+  const { rooms } = useRooms();
 
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<ServiceDevice | null>(null);
@@ -800,14 +889,14 @@ export default function DeviceActive() {
     setRefreshing(false);
   };
 
-  const handleAddDevice = async (data: { serialNumber: string; name: string; type: DeviceType }) => {
+  const handleAddDevice = async (data: { serialNumber: string; name: string; type: DeviceType; roomId?: number }) => {
     setAddingDevice(true);
     try {
       await addDevice({
         serialNumber: data.serialNumber,
         name: data.name,
         type: data.type,
-        roomId: undefined,
+        roomId: data.roomId,
       });
       setAddModalVisible(false);
       Alert.alert('Success', `${data.name} has been added successfully!`);
@@ -821,7 +910,7 @@ export default function DeviceActive() {
 
   const handleControl = async (deviceId: number, action: 'turnOn' | 'turnOff') => {
     try {
-      await controlDevice(deviceId, action === 'turnOn' ? 'on' : 'off');
+      await controlDevice(deviceId, action);
     } catch (err: any) {
       console.error('Failed to control device:', err);
       Alert.alert('Error', err.message || 'Failed to control device');
@@ -981,6 +1070,7 @@ export default function DeviceActive() {
         onClose={() => setAddModalVisible(false)}
         onAdd={handleAddDevice}
         loading={addingDevice}
+        rooms={rooms}
       />
 
       <DeviceDetailsModal
@@ -1420,6 +1510,54 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.9)',
     marginTop: 4,
+  },
+  previewRoom: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 2,
+  },
+  // Room selection styles
+  roomsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 16,
+  },
+  roomCard: {
+    width: (width - 80) / 2,
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  roomIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  roomName: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  roomCheckmark: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+  },
+  noRoomsMessage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  noRoomsText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 20,
   },
   // Details modal styles
   detailsModal: {
