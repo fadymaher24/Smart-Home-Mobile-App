@@ -571,10 +571,10 @@ const AddDeviceModal = ({
             style={[
               styles.roomCard,
               {
-                backgroundColor: !selectedRoomId
+                backgroundColor: selectedRoomId === null
                   ? 'rgba(76, 175, 80, 0.2)'
                   : isDark ? '#1a1a1a' : '#f5f5f5',
-                borderColor: !selectedRoomId ? '#4CAF50' : 'transparent',
+                borderColor: selectedRoomId === null ? '#4CAF50' : 'transparent',
                 borderWidth: 2,
               },
             ]}
@@ -586,7 +586,7 @@ const AddDeviceModal = ({
             <Text style={[styles.roomName, { color: isDark ? '#fff' : '#333' }]}>
               Skip for now
             </Text>
-            {!selectedRoomId && (
+            {selectedRoomId === null && (
               <View style={styles.roomCheckmark}>
                 <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
               </View>
@@ -594,34 +594,37 @@ const AddDeviceModal = ({
           </TouchableOpacity>
 
           {/* Room Options */}
-          {rooms.map((room) => (
-            <TouchableOpacity
-              key={room.roomId}
-              style={[
-                styles.roomCard,
-                {
-                  backgroundColor: selectedRoomId === room.roomId
-                    ? 'rgba(76, 175, 80, 0.2)'
-                    : isDark ? '#1a1a1a' : '#f5f5f5',
-                  borderColor: selectedRoomId === room.roomId ? '#4CAF50' : 'transparent',
-                  borderWidth: 2,
-                },
-              ]}
-              onPress={() => setSelectedRoomId(room.roomId)}
-            >
-              <View style={[styles.roomIconContainer, { backgroundColor: '#2196F3' }]}>
-                <MaterialCommunityIcons name={(room.icon || 'door') as any} size={28} color="#fff" />
-              </View>
-              <Text style={[styles.roomName, { color: isDark ? '#fff' : '#333' }]}>
-                {room.name}
-              </Text>
-              {selectedRoomId === room.roomId && (
-                <View style={styles.roomCheckmark}>
-                  <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+          {rooms.map((room) => {
+            const isSelected = selectedRoomId !== null && selectedRoomId === room.roomId;
+            return (
+              <TouchableOpacity
+                key={room.roomId}
+                style={[
+                  styles.roomCard,
+                  {
+                    backgroundColor: isSelected
+                      ? 'rgba(76, 175, 80, 0.2)'
+                      : isDark ? '#1a1a1a' : '#f5f5f5',
+                    borderColor: isSelected ? '#4CAF50' : 'transparent',
+                    borderWidth: 2,
+                  },
+                ]}
+                onPress={() => setSelectedRoomId(room.roomId)}
+              >
+                <View style={[styles.roomIconContainer, { backgroundColor: '#2196F3' }]}>
+                  <MaterialCommunityIcons name={(room.icon || 'door') as any} size={28} color="#fff" />
                 </View>
-              )}
-            </TouchableOpacity>
-          ))}
+                <Text style={[styles.roomName, { color: isDark ? '#fff' : '#333' }]}>
+                  {room.name}
+                </Text>
+                {isSelected && (
+                  <View style={styles.roomCheckmark}>
+                    <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
 
           {/* Create New Room Button */}
           <TouchableOpacity
@@ -698,7 +701,7 @@ const AddDeviceModal = ({
               {DEVICE_TYPES.find(t => t.type === selectedType)?.label}
             </Text>
             <Text style={styles.previewRoom}>
-              {selectedRoomId 
+              {selectedRoomId !== null
                 ? rooms.find(r => r.roomId === selectedRoomId)?.name || 'Unknown Room'
                 : 'No Room'}
             </Text>

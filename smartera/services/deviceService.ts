@@ -103,7 +103,13 @@ export const deviceService = {
   async getRooms(token: string): Promise<{ roomId: number; name: string; icon?: string }[]> {
     try {
       const response = await apiRequest('/rooms', 'GET', undefined, token);
-      return response.rooms || response || [];
+      const roomList = response.rooms || response || [];
+      // Normalize room data - backend might return 'roomId' or 'id'
+      return roomList.map((room: any) => ({
+        roomId: room.roomId ?? room.id,
+        name: room.name,
+        icon: room.icon,
+      }));
     } catch {
       return [];
     }
@@ -115,7 +121,13 @@ export const deviceService = {
     token: string
   ): Promise<{ roomId: number; name: string; icon?: string }> {
     const response = await apiRequest('/rooms', 'POST', roomData, token);
-    return response.room || response;
+    const room = response.room || response;
+    // Normalize - backend might return 'roomId' or 'id'
+    return {
+      roomId: room.roomId ?? room.id,
+      name: room.name,
+      icon: room.icon,
+    };
   },
 
   // Add new device (POST /api/device)
