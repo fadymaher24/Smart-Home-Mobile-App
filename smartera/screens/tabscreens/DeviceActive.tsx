@@ -263,7 +263,7 @@ const AddDeviceModal = ({
   onAdd: (data: { serialNumber: string; name: string; type: DeviceType; roomId?: number }) => void;
   loading: boolean;
   rooms: Room[];
-  onCreateRoom: (name: string) => Promise<Room>;
+  onCreateRoom: (name: string, icon?: string) => Promise<Room>;
   creatingRoom: boolean;
 }) => {
   const { theme } = useTheme();
@@ -310,7 +310,13 @@ const AddDeviceModal = ({
     if (!newRoomName.trim()) return;
     
     try {
-      const newRoom = await onCreateRoom(newRoomName.trim());
+      // Find icon from suggested rooms if name matches
+      const suggestedRoom = SUGGESTED_ROOMS.find(
+        s => s.name.toLowerCase() === newRoomName.trim().toLowerCase()
+      );
+      const icon = suggestedRoom?.icon;
+      
+      const newRoom = await onCreateRoom(newRoomName.trim(), icon);
       setSelectedRoomId(newRoom.roomId);
       setShowNewRoomInput(false);
       setNewRoomName('');
@@ -837,10 +843,32 @@ const DeviceDetailsModal = ({
 }) => {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const [controlling, setControlling] = useState(false);
+  const lastControlTime = useRef(0);
 
   if (!device) return null;
 
   const deviceTypeInfo = DEVICE_TYPES.find(t => t.type === device.type) || DEVICE_TYPES[0];
+
+  const handlePowerToggle = async () => {
+    // Debounce - prevent rapid taps (must wait 1 second between taps)
+    const now = Date.now();
+    if (now - lastControlTime.current < 1000) {
+      console.log('Debouncing power toggle - too fast');
+      return;
+    }
+    lastControlTime.current = now;
+
+    if (controlling) return;
+    
+    setControlling(true);
+    try {
+      await onControl(device.id, device.powerState ? 'turnOff' : 'turnOn');
+    } finally {
+      // Keep button disabled for a short time to prevent double-tap
+      setTimeout(() => setControlling(false), 500);
+    }
+  };
 
   return (
     <Modal
@@ -890,14 +918,26 @@ const DeviceDetailsModal = ({
               <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#333' }]}>Power Control</Text>
               <View style={styles.powerControlRow}>
                 <TouchableOpacity
-                  style={[styles.powerControlButton, { backgroundColor: device.powerState ? '#4CAF50' : (isDark ? '#333' : '#eee') }]}
-                  onPress={() => onControl(device.id, device.powerState ? 'turnOff' : 'turnOn')}
+                  style={[
+                    styles.powerControlButton, 
+                    { 
+                      backgroundColor: device.powerState ? '#4CAF50' : (isDark ? '#333' : '#eee'),
+                      opacity: controlling ? 0.6 : 1,
+                    }
+                  ]}
+                  onPress={handlePowerToggle}
+                  disabled={controlling}
+                  activeOpacity={0.7}
                 >
-                  <Ionicons
-                    name="power"
-                    size={32}
-                    color={device.powerState ? '#fff' : '#888'}
-                  />
+                  {controlling ? (
+                    <ActivityIndicator color={device.powerState ? '#fff' : '#888'} size="small" />
+                  ) : (
+                    <Ionicons
+                      name="power"
+                      size={32}
+                      color={device.powerState ? '#fff' : '#888'}
+                    />
+                  )}
                   <Text style={[styles.powerControlText, { color: device.powerState ? '#fff' : '#888' }]}>
                     {device.powerState ? 'ON' : 'OFF'}
                   </Text>
@@ -1026,8 +1066,8 @@ export default function DeviceActive() {
     setRefreshing(false);
   };
 
-  const handleCreateRoom = async (name: string): Promise<Room> => {
-    const newRoom = await createRoom(name);
+  const handleCreateRoom = async (name: string, icon?: string): Promise<Room> => {
+    const newRoom = await createRoom(name, icon);
     return newRoom;
   };
 

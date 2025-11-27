@@ -10,6 +10,8 @@ export function useDevices() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Track devices with pending control commands (ignore status updates briefly)
+  const pendingControlRef = useRef<Map<string | number, number>>(new Map());
 
   const loadDevices = useCallback(async () => {
     if (!token) return;
@@ -43,15 +45,30 @@ export function useDevices() {
 
     // Subscribe to device status updates
     const unsubscribeStatus = realtimeService.subscribe('device-status', (message) => {
+      // Check if device has pending command (within 2 seconds)
+      const pendingTime = pendingControlRef.current.get(message.deviceId) || 
+                          pendingControlRef.current.get(message.serialNumber);
+      const hasPending = pendingTime && Date.now() - pendingTime < 2000;
+      
       setDevices(prev => prev.map(device => 
         (device.id === message.deviceId || device.serialNumber === message.serialNumber)
-          ? { ...device, isOnline: message.isOnline, powerState: message.powerState }
+          ? { 
+              ...device, 
+              isOnline: message.isOnline,
+              // Only update powerState if no pending command
+              powerState: hasPending ? device.powerState : (message.powerState ?? device.powerState),
+            }
           : device
       ));
     });
 
-    // Subscribe to telemetry updates
+    // Subscribe to telemetry updates - this has the actual relay state
     const unsubscribeTelemetry = realtimeService.subscribe('telemetry', (message) => {
+      // Check if device has pending command (within 2 seconds)
+      const pendingTime = pendingControlRef.current.get(message.deviceId) || 
+                          pendingControlRef.current.get(message.serialNumber);
+      const hasPending = pendingTime && Date.now() - pendingTime < 2000;
+      
       setDevices(prev => prev.map(device => 
         (device.id === message.deviceId || device.serialNumber === message.serialNumber)
           ? { 
@@ -62,8 +79,12 @@ export function useDevices() {
                 voltage: message.voltage,
                 current: message.current,
                 energyTotal: message.energyTotal || message.energy,
+                relay: message.relay,
               } as DeviceTelemetry,
-              powerState: message.relay ?? device.powerState,
+              // Update powerState from relay if present and no pending command
+              powerState: hasPending 
+                ? device.powerState 
+                : (message.relay !== undefined ? message.relay : device.powerState),
             }
           : device
       ));
@@ -91,22 +112,59 @@ export function useDevices() {
   const controlDevice = useCallback(async (deviceId: string | number, action: 'turnOn' | 'turnOff') => {
     if (!token) return;
 
+    // Find the device first
+    const device = devices.find(d => d.id === deviceId || d.serialNumber === deviceId);
+    
+    // Optimistically update UI IMMEDIATELY (before API call)
+    const expectedState = action === 'turnOn';
+    setDevices(prev => prev.map(d =>
+      (d.id === deviceId || d.serialNumber === deviceId)
+        ? { ...d, powerState: expectedState }
+        : d
+    ));
+    
+    // Mark device as having pending command (ignore conflicting status updates for 2 seconds)
+    const now = Date.now();
+    pendingControlRef.current.set(deviceId, now);
+    if (device) {
+      pendingControlRef.current.set(device.id, now);
+      pendingControlRef.current.set(device.serialNumber, now);
+    }
+
     try {
+      // Send command to server (don't block UI)
       await deviceService.controlDevice(deviceId, action, token);
       
-      // Optimistically update UI
-      setDevices(prev => prev.map(device =>
-        (device.id === deviceId || device.serialNumber === deviceId)
-          ? { ...device, powerState: action === 'turnOn' }
-          : device
-      ));
+      // Clear pending flag after 2 seconds to allow real telemetry through
+      setTimeout(() => {
+        const storedTime = pendingControlRef.current.get(deviceId);
+        if (storedTime === now) {
+          pendingControlRef.current.delete(deviceId);
+          if (device) {
+            pendingControlRef.current.delete(device.id);
+            pendingControlRef.current.delete(device.serialNumber);
+          }
+        }
+      }, 2000);
       
       return true;
     } catch (err: any) {
+      // Revert optimistic update on error
+      setDevices(prev => prev.map(d =>
+        (d.id === deviceId || d.serialNumber === deviceId)
+          ? { ...d, powerState: !expectedState }
+          : d
+      ));
+      // Clear pending flag on error
+      pendingControlRef.current.delete(deviceId);
+      if (device) {
+        pendingControlRef.current.delete(device.id);
+        pendingControlRef.current.delete(device.serialNumber);
+      }
       console.error('Failed to control device:', err);
       throw err;
     }
-  }, [token]);
+  }, [token, devices]);
 
   const addDevice = useCallback(async (deviceData: { serialNumber: string; name: string; type: string; roomId?: number }) => {
     if (!token) return;
