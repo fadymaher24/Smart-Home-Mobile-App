@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { Colors } from "../utils/colors";
 
 const LoginScreen = () => {
   const { theme } = useTheme();
@@ -137,7 +138,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   button: {
-    backgroundColor: "#A97664",
+    backgroundColor: Colors.primary,
     padding: 15,
     borderRadius: 8,
     alignItems: "center",

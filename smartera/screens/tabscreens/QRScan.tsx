@@ -53,7 +53,7 @@ export default function QRScan({
   if (!permission) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#A97664" />
+        <ActivityIndicator size="large" color="#5B6EF5" />
         <Text style={{ color: "#fff", marginTop: 16 }}>
           Checking camera permissions...
         </Text>
@@ -122,21 +122,23 @@ export default function QRScan({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" },
+  container: { flex: 1, backgroundColor: "#0F172A" },
   camStyle: { flex: 1 },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#000",
+    backgroundColor: "#0F172A",
+    padding: 20,
   },
-  button: { backgroundColor: "#A97664", padding: 14, borderRadius: 8 },
+  button: { backgroundColor: "#5B6EF5", padding: 14, borderRadius: 12, minWidth: 160, alignItems: "center" },
   cancelBtn: {
     position: "absolute",
     bottom: 40,
     alignSelf: "center",
-    backgroundColor: "#A97664",
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: "#5B6EF5",
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
   },
 });

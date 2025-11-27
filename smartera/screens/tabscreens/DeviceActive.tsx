@@ -18,6 +18,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { useTheme } from "../../context/ThemeContext";
+import { Colors } from "../../utils/colors";
 import { useDevices, useRealtimeConnection, useRooms } from "../../hooks/useDeviceData";
 import { Device as ServiceDevice } from "../../services/deviceService";
 import { MaterialCommunityIcons, Ionicons, Feather } from "@expo/vector-icons";
@@ -46,32 +47,32 @@ const DEVICE_TYPES: DeviceTypeOption[] = [
     type: 'SMART_PLUG',
     label: 'Smart Plug',
     icon: 'power-socket-eu',
-    color: '#4CAF50',
-    gradient: ['#4CAF50', '#2E7D32'],
+    color: Colors.success,
+    gradient: [Colors.success, '#059669'],
     description: 'Control power outlets remotely'
   },
   {
     type: 'RGB_LIGHT',
     label: 'RGB Light',
     icon: 'lightbulb',
-    color: '#FF9800',
-    gradient: ['#FF9800', '#F57C00'],
+    color: Colors.warning,
+    gradient: [Colors.warning, '#D97706'],
     description: 'Smart lighting with colors'
   },
   {
     type: 'THERMOSTAT',
     label: 'Thermostat',
     icon: 'thermometer',
-    color: '#2196F3',
-    gradient: ['#2196F3', '#1565C0'],
+    color: Colors.accent,
+    gradient: [Colors.accent, '#0891B2'],
     description: 'Temperature control'
   },
   {
     type: 'SENSOR',
     label: 'Sensor',
     icon: 'access-point',
-    color: '#9C27B0',
-    gradient: ['#9C27B0', '#6A1B9A'],
+    color: Colors.secondary,
+    gradient: [Colors.secondary, '#7C3AED'],
     description: 'Environmental monitoring'
   },
 ];
@@ -80,14 +81,14 @@ const { width, height } = Dimensions.get("window");
 
 // Suggested rooms for quick selection
 const SUGGESTED_ROOMS = [
-  { name: 'Living Room', icon: 'sofa', color: '#4CAF50' },
-  { name: 'Bedroom', icon: 'bed', color: '#2196F3' },
-  { name: 'Kitchen', icon: 'silverware-fork-knife', color: '#FF9800' },
-  { name: 'Bathroom', icon: 'shower', color: '#00BCD4' },
-  { name: 'Office', icon: 'desk', color: '#9C27B0' },
-  { name: 'Garage', icon: 'garage', color: '#607D8B' },
-  { name: 'Garden', icon: 'flower', color: '#8BC34A' },
-  { name: 'Dining Room', icon: 'table-furniture', color: '#795548' },
+  { name: 'Living Room', icon: 'sofa', color: Colors.success },
+  { name: 'Bedroom', icon: 'bed', color: Colors.primary },
+  { name: 'Kitchen', icon: 'silverware-fork-knife', color: Colors.warning },
+  { name: 'Bathroom', icon: 'shower', color: Colors.accent },
+  { name: 'Office', icon: 'desk', color: Colors.secondary },
+  { name: 'Garage', icon: 'garage', color: '#64748B' },
+  { name: 'Garden', icon: 'flower', color: '#22C55E' },
+  { name: 'Dining Room', icon: 'table-furniture', color: '#A16207' },
 ];
 
 // Animated Device Card Component
@@ -182,7 +183,7 @@ const DeviceCard = ({
           style={[
             styles.deviceCard,
             {
-              borderColor: isOnline ? (isPowerOn ? deviceTypeInfo.color : '#666') : '#ff4444',
+              borderColor: isOnline ? (isPowerOn ? deviceTypeInfo.color : '#666') : Colors.error,
               borderWidth: 2,
             },
           ]}
@@ -194,7 +195,7 @@ const DeviceCard = ({
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: isOnline ? '#4CAF50' : '#ff4444' },
+                { backgroundColor: isOnline ? Colors.success : Colors.error },
               ]}
             />
             <Text style={[styles.statusText, { color: isPowerOn ? '#fff' : (isDark ? '#aaa' : '#666') }]}>
@@ -507,9 +508,9 @@ const AddDeviceModal = ({
                   styles.suggestedRoomCard,
                   {
                     backgroundColor: newRoomName === suggestion.name
-                      ? 'rgba(76, 175, 80, 0.2)'
+                      ? 'rgba(91, 110, 245, 0.15)'
                       : isDark ? '#1a1a1a' : '#f5f5f5',
-                    borderColor: newRoomName === suggestion.name ? '#4CAF50' : 'transparent',
+                    borderColor: newRoomName === suggestion.name ? Colors.primary : 'transparent',
                   },
                 ]}
                 onPress={() => setNewRoomName(suggestion.name)}
@@ -552,7 +553,7 @@ const AddDeviceModal = ({
             style={[
               styles.createRoomButton,
               {
-                backgroundColor: newRoomName.trim() ? '#4CAF50' : '#888',
+                backgroundColor: newRoomName.trim() ? Colors.primary : '#888',
                 opacity: creatingRoom ? 0.7 : 1,
               },
             ]}
@@ -578,9 +579,9 @@ const AddDeviceModal = ({
               styles.roomCard,
               {
                 backgroundColor: selectedRoomId === null
-                  ? 'rgba(76, 175, 80, 0.2)'
+                  ? 'rgba(91, 110, 245, 0.15)'
                   : isDark ? '#1a1a1a' : '#f5f5f5',
-                borderColor: selectedRoomId === null ? '#4CAF50' : 'transparent',
+                borderColor: selectedRoomId === null ? Colors.primary : 'transparent',
                 borderWidth: 2,
               },
             ]}
@@ -594,7 +595,7 @@ const AddDeviceModal = ({
             </Text>
             {selectedRoomId === null && (
               <View style={styles.roomCheckmark}>
-                <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />
               </View>
             )}
           </TouchableOpacity>
@@ -609,15 +610,15 @@ const AddDeviceModal = ({
                   styles.roomCard,
                   {
                     backgroundColor: isSelected
-                      ? 'rgba(76, 175, 80, 0.2)'
+                      ? 'rgba(91, 110, 245, 0.15)'
                       : isDark ? '#1a1a1a' : '#f5f5f5',
-                    borderColor: isSelected ? '#4CAF50' : 'transparent',
+                    borderColor: isSelected ? Colors.primary : 'transparent',
                     borderWidth: 2,
                   },
                 ]}
                 onPress={() => setSelectedRoomId(room.roomId)}
               >
-                <View style={[styles.roomIconContainer, { backgroundColor: '#2196F3' }]}>
+                <View style={[styles.roomIconContainer, { backgroundColor: Colors.primary }]}>
                   <MaterialCommunityIcons name={(room.icon || 'door') as any} size={28} color="#fff" />
                 </View>
                 <Text style={[styles.roomName, { color: isDark ? '#fff' : '#333' }]}>
@@ -625,7 +626,7 @@ const AddDeviceModal = ({
                 </Text>
                 {isSelected && (
                   <View style={styles.roomCheckmark}>
-                    <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                    <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />
                   </View>
                 )}
               </TouchableOpacity>
@@ -638,17 +639,17 @@ const AddDeviceModal = ({
               styles.roomCard,
               {
                 backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5',
-                borderColor: '#FF9800',
+                borderColor: Colors.secondary,
                 borderWidth: 2,
                 borderStyle: 'dashed',
               },
             ]}
             onPress={() => setShowNewRoomInput(true)}
           >
-            <View style={[styles.roomIconContainer, { backgroundColor: '#FF9800' }]}>
+            <View style={[styles.roomIconContainer, { backgroundColor: Colors.secondary }]}>
               <Ionicons name="add" size={28} color="#fff" />
             </View>
-            <Text style={[styles.roomName, { color: '#FF9800' }]}>
+            <Text style={[styles.roomName, { color: Colors.secondary }]}>
               + Create New
             </Text>
           </TouchableOpacity>
@@ -765,7 +766,7 @@ const AddDeviceModal = ({
                   style={[
                     styles.stepDot,
                     {
-                      backgroundColor: s <= step ? '#4CAF50' : (isDark ? '#333' : '#ddd'),
+                      backgroundColor: s <= step ? Colors.primary : (isDark ? '#333' : '#ddd'),
                       width: s === step ? 24 : 8,
                     },
                   ]}
@@ -799,7 +800,7 @@ const AddDeviceModal = ({
                     (step === 2 && serialNumber.trim()) ||
                     (step === 3) || // Room selection is always valid (can skip)
                     (step === 4 && deviceName.trim())
-                  ) ? '#4CAF50' : '#888',
+                  ) ? Colors.primary : '#888',
                 },
               ]}
               onPress={handleNext}
@@ -904,8 +905,8 @@ const DeviceDetailsModal = ({
             <Text style={styles.detailsSerial}>{device.serialNumber}</Text>
             
             <View style={styles.detailsStatusRow}>
-              <View style={[styles.detailsStatusBadge, { backgroundColor: device.isOnline ? 'rgba(76,175,80,0.3)' : 'rgba(255,68,68,0.3)' }]}>
-                <View style={[styles.statusDotLarge, { backgroundColor: device.isOnline ? '#4CAF50' : '#ff4444' }]} />
+              <View style={[styles.detailsStatusBadge, { backgroundColor: device.isOnline ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)' }]}>
+                <View style={[styles.statusDotLarge, { backgroundColor: device.isOnline ? Colors.success : Colors.error }]} />
                 <Text style={styles.detailsStatusText}>{device.isOnline ? 'Online' : 'Offline'}</Text>
               </View>
             </View>
@@ -921,7 +922,7 @@ const DeviceDetailsModal = ({
                   style={[
                     styles.powerControlButton, 
                     { 
-                      backgroundColor: device.powerState ? '#4CAF50' : (isDark ? '#333' : '#eee'),
+                      backgroundColor: device.powerState ? Colors.success : (isDark ? '#333' : '#eee'),
                       opacity: controlling ? 0.6 : 1,
                     }
                   ]}
@@ -951,28 +952,28 @@ const DeviceDetailsModal = ({
                 <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#333' }]}>Real-time Data</Text>
                 <View style={styles.telemetryGrid}>
                   <View style={[styles.telemetryCard, { backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5' }]}>
-                    <Feather name="zap" size={20} color="#FF9800" />
+                    <Feather name="zap" size={20} color={Colors.warning} />
                     <Text style={[styles.telemetryValue, { color: isDark ? '#fff' : '#333' }]}>
                       {(device.lastTelemetry.power || 0).toFixed(1)}
                     </Text>
                     <Text style={[styles.telemetryUnit, { color: isDark ? '#888' : '#666' }]}>Watts</Text>
                   </View>
                   <View style={[styles.telemetryCard, { backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5' }]}>
-                    <Feather name="activity" size={20} color="#2196F3" />
+                    <Feather name="activity" size={20} color={Colors.primary} />
                     <Text style={[styles.telemetryValue, { color: isDark ? '#fff' : '#333' }]}>
                       {(device.lastTelemetry.voltage || 0).toFixed(1)}
                     </Text>
                     <Text style={[styles.telemetryUnit, { color: isDark ? '#888' : '#666' }]}>Volts</Text>
                   </View>
                   <View style={[styles.telemetryCard, { backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5' }]}>
-                    <Feather name="trending-up" size={20} color="#4CAF50" />
+                    <Feather name="trending-up" size={20} color={Colors.success} />
                     <Text style={[styles.telemetryValue, { color: isDark ? '#fff' : '#333' }]}>
                       {(device.lastTelemetry.current || 0).toFixed(2)}
                     </Text>
                     <Text style={[styles.telemetryUnit, { color: isDark ? '#888' : '#666' }]}>Amps</Text>
                   </View>
                   <View style={[styles.telemetryCard, { backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5' }]}>
-                    <Feather name="battery-charging" size={20} color="#9C27B0" />
+                    <Feather name="battery-charging" size={20} color={Colors.secondary} />
                     <Text style={[styles.telemetryValue, { color: isDark ? '#fff' : '#333' }]}>
                       {(device.lastTelemetry.energy || device.lastTelemetry.energyTotal || 0).toFixed(2)}
                     </Text>
@@ -1007,7 +1008,7 @@ const DeviceDetailsModal = ({
 
             {/* Danger Zone */}
             <View style={styles.detailsSection}>
-              <Text style={[styles.sectionTitle, { color: '#ff4444' }]}>Danger Zone</Text>
+              <Text style={[styles.sectionTitle, { color: Colors.error }]}>Danger Zone</Text>
               <TouchableOpacity
                 style={styles.deleteButton}
                 onPress={() => {
@@ -1028,7 +1029,7 @@ const DeviceDetailsModal = ({
                   );
                 }}
               >
-                <Ionicons name="trash-outline" size={20} color="#ff4444" />
+                <Ionicons name="trash-outline" size={20} color={Colors.error} />
                 <Text style={styles.deleteButtonText}>Remove Device</Text>
               </TouchableOpacity>
             </View>
@@ -1119,7 +1120,7 @@ export default function DeviceActive() {
     <View style={[styles.container, { backgroundColor: isDark ? '#121212' : '#f8f9fa' }]}>
       {/* Header */}
       <LinearGradient
-        colors={isDark ? ['#1e1e1e', '#121212'] : ['#4CAF50', '#2E7D32']}
+        colors={isDark ? ['#1e1e1e', '#121212'] : [Colors.primary, Colors.secondary]}
         style={styles.header}
       >
         <View style={styles.headerContent}>
@@ -1132,8 +1133,8 @@ export default function DeviceActive() {
           
           <View style={styles.headerRight}>
             {/* Connection Status */}
-            <View style={[styles.connectionBadge, { backgroundColor: wsConnected ? 'rgba(76,175,80,0.3)' : 'rgba(255,68,68,0.3)' }]}>
-              <View style={[styles.connectionDot, { backgroundColor: wsConnected ? '#4CAF50' : '#ff4444' }]} />
+            <View style={[styles.connectionBadge, { backgroundColor: wsConnected ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)' }]}>
+              <View style={[styles.connectionDot, { backgroundColor: wsConnected ? Colors.success : Colors.error }]} />
               <Text style={styles.connectionText}>{wsConnected ? 'Live' : 'Offline'}</Text>
             </View>
           </View>
@@ -1145,13 +1146,13 @@ export default function DeviceActive() {
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={isDark ? '#fff' : '#4CAF50'} />
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={isDark ? '#fff' : Colors.primary} />
         }
         showsVerticalScrollIndicator={false}
       >
         {loading && devices.length === 0 ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#4CAF50" />
+            <ActivityIndicator size="large" color={Colors.primary} />
             <Text style={[styles.loadingText, { color: isDark ? '#888' : '#666' }]}>
               Loading devices...
             </Text>
@@ -1159,7 +1160,7 @@ export default function DeviceActive() {
         ) : devices.length === 0 ? (
           <View style={styles.emptyContainer}>
             <LinearGradient
-              colors={['#4CAF50', '#2E7D32']}
+              colors={[Colors.primary, Colors.secondary]}
               style={styles.emptyIconContainer}
             >
               <MaterialCommunityIcons name="devices" size={48} color="#fff" />
@@ -1183,8 +1184,8 @@ export default function DeviceActive() {
             {/* Quick Stats */}
             <View style={styles.statsRow}>
               <View style={[styles.statCard, { backgroundColor: isDark ? '#1e1e1e' : '#fff' }]}>
-                <View style={[styles.statIconBg, { backgroundColor: '#4CAF5020' }]}>
-                  <Ionicons name="power" size={20} color="#4CAF50" />
+                <View style={[styles.statIconBg, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+                  <Ionicons name="power" size={20} color={Colors.success} />
                 </View>
                 <Text style={[styles.statValue, { color: isDark ? '#fff' : '#333' }]}>
                   {devices.filter(d => d.powerState).length}
@@ -1192,8 +1193,8 @@ export default function DeviceActive() {
                 <Text style={[styles.statLabel, { color: isDark ? '#888' : '#666' }]}>Active</Text>
               </View>
               <View style={[styles.statCard, { backgroundColor: isDark ? '#1e1e1e' : '#fff' }]}>
-                <View style={[styles.statIconBg, { backgroundColor: '#2196F320' }]}>
-                  <Ionicons name="wifi" size={20} color="#2196F3" />
+                <View style={[styles.statIconBg, { backgroundColor: 'rgba(91,110,245,0.12)' }]}>
+                  <Ionicons name="wifi" size={20} color={Colors.primary} />
                 </View>
                 <Text style={[styles.statValue, { color: isDark ? '#fff' : '#333' }]}>
                   {devices.filter(d => d.isOnline).length}
@@ -1201,8 +1202,8 @@ export default function DeviceActive() {
                 <Text style={[styles.statLabel, { color: isDark ? '#888' : '#666' }]}>Online</Text>
               </View>
               <View style={[styles.statCard, { backgroundColor: isDark ? '#1e1e1e' : '#fff' }]}>
-                <View style={[styles.statIconBg, { backgroundColor: '#FF980020' }]}>
-                  <Feather name="zap" size={20} color="#FF9800" />
+                <View style={[styles.statIconBg, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
+                  <Feather name="zap" size={20} color={Colors.warning} />
                 </View>
                 <Text style={[styles.statValue, { color: isDark ? '#fff' : '#333' }]}>
                   {devices.reduce((sum, d) => sum + (d.lastTelemetry?.power || 0), 0).toFixed(0)}W
@@ -1239,7 +1240,7 @@ export default function DeviceActive() {
         activeOpacity={0.8}
       >
         <LinearGradient
-          colors={['#4CAF50', '#2E7D32']}
+          colors={[Colors.primary, Colors.secondary]}
           style={styles.fabGradient}
         >
           <Ionicons name="add" size={28} color="#fff" />
@@ -1361,7 +1362,7 @@ const styles = StyleSheet.create({
   emptyButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4CAF50',
+    backgroundColor: Colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 24,
@@ -1937,11 +1938,11 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#ff4444',
+    borderColor: Colors.error,
     gap: 8,
   },
   deleteButtonText: {
-    color: '#ff4444',
+    color: Colors.error,
     fontSize: 16,
     fontWeight: '600',
   },

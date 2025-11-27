@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,12 +6,16 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  RefreshControl,
+  Platform,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
 import { apiRequest } from "../../utils/api";
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Colors, { withAlpha } from "../../utils/colors";
 
 interface NotificationItemProps {
   id: string;
@@ -32,6 +36,7 @@ const NotificationItem = ({
 }: NotificationItemProps) => {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const themeColors = isDark ? Colors.dark : Colors.light;
 
   const getIconName = () => {
     switch (type) {
@@ -49,19 +54,19 @@ const NotificationItem = ({
   const getIconColor = () => {
     switch (type) {
       case "alert":
-        return "#FF5252";
+        return Colors.danger;
       case "success":
-        return "#4CAF50";
+        return Colors.success;
       case "info":
-        return "#2196F3";
+        return Colors.info;
       default:
-        return "#757575";
+        return themeColors.textSecondary;
     }
   };
 
   return (
     <TouchableOpacity
-      style={styles(theme).notificationItem}
+      style={[styles.notificationItem, { backgroundColor: themeColors.surface }]}
       onLongPress={() => {
         Alert.alert(
           "Delete Notification",
@@ -79,29 +84,26 @@ const NotificationItem = ({
           ]
         );
       }}
+      activeOpacity={0.8}
     >
       <View
         style={[
-          styles(theme).iconContainer,
-          { backgroundColor: `${getIconColor()}20` },
+          styles.iconContainer,
+          { backgroundColor: withAlpha(getIconColor(), 0.15) },
         ]}
       >
         <Feather name={getIconName()} size={24} color={getIconColor()} />
       </View>
-      <View style={styles(theme).contentContainer}>
-        <Text style={styles(theme).title}>{title}</Text>
-        <Text style={styles(theme).message}>{message}</Text>
-        <Text style={styles(theme).time}>{time}</Text>
+      <View style={styles.contentContainer}>
+        <Text style={[styles.title, { color: themeColors.text }]}>{title}</Text>
+        <Text style={[styles.message, { color: themeColors.textSecondary }]}>{message}</Text>
+        <Text style={[styles.time, { color: themeColors.textTertiary }]}>{time}</Text>
       </View>
       <TouchableOpacity
-        style={styles(theme).deleteButton}
+        style={styles.deleteButton}
         onPress={() => onDelete(id)}
       >
-        <Feather
-          name="trash-2"
-          size={20}
-          color={isDark ? "#FF5252" : "#FF5252"}
-        />
+        <Feather name="trash-2" size={20} color={Colors.danger} />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -110,6 +112,9 @@ const NotificationItem = ({
 export default function Notification() {
   const { theme } = useTheme();
   const { token } = useAuth();
+  const isDark = theme === "dark";
+  const themeColors = isDark ? Colors.dark : Colors.light;
+  
   const [notifications, setNotifications] = useState<
     Array<{
       id: string;
@@ -119,99 +124,100 @@ export default function Notification() {
       type: "alert" | "success" | "info";
     }>
   >([]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadNotifications();
-  }, [token]);
-
-  const loadNotifications = async () => {
-    if (!token) return;
-
+  const loadNotifications = useCallback(async () => {
+    // First try to load from local storage (faster)
     try {
-      // Load notifications from backend
-      const backendNotifications = await apiRequest(
-        "/notifications",
-        "GET",
-        null,
-        token
-      );
-      setNotifications(
-        backendNotifications.map((notif: any) => ({
-          id: notif._id,
-          title: notif.title,
-          message: notif.message,
-          time: new Date(notif.createdAt).toLocaleTimeString(),
-          type: notif.type,
-        }))
-      );
-    } catch (error) {
-      console.log("Failed to load notifications from backend:", error);
+      const storedNotifications = await AsyncStorage.getItem("notifications");
+      if (storedNotifications) {
+        setNotifications(JSON.parse(storedNotifications));
+      }
+    } catch (storageError) {
+      console.log("Error loading from storage:", storageError);
+    }
 
-      // Fallback to local storage
+    // Then try to load from backend (might fail, that's okay)
+    if (token) {
       try {
+        const backendNotifications = await apiRequest(
+          "/notifications",
+          "GET",
+          null,
+          token
+        );
+        
+        if (backendNotifications && Array.isArray(backendNotifications)) {
+          const mapped = backendNotifications.map((notif: any) => ({
+            id: notif._id || notif.id,
+            title: notif.title,
+            message: notif.message,
+            time: new Date(notif.createdAt).toLocaleTimeString(),
+            type: notif.type || 'info',
+          }));
+          setNotifications(mapped);
+          // Save to local storage for offline access
+          await AsyncStorage.setItem("notifications", JSON.stringify(mapped));
+        }
+      } catch (error) {
+        // Backend failed - silently use local storage data
+        // Don't show error to user, just use cached notifications
+        console.log("Backend notifications unavailable, using local cache");
+        
+        // If no local cache exists, set default notifications
         const storedNotifications = await AsyncStorage.getItem("notifications");
-        if (storedNotifications) {
-          setNotifications(JSON.parse(storedNotifications));
-        } else {
-          // Initialize with default notifications if none exist
+        if (!storedNotifications || JSON.parse(storedNotifications).length === 0) {
           const defaultNotifications = [
             {
-              id: "1",
-              title: "High Power Usage",
-              message: "Your living room AC is consuming more power than usual",
-              time: "2m ago",
-              type: "alert" as const,
-            },
-            {
-              id: "2",
-              title: "Device Connected",
-              message: "New smart bulb connected successfully",
-              time: "15m ago",
-              type: "success" as const,
-            },
-            {
-              id: "3",
-              title: "System Update",
-              message: "New features available for your smart home",
-              time: "1h ago",
+              id: "default-1",
+              title: "Welcome to Smartera",
+              message: "Start by adding your first smart device",
+              time: "Just now",
               type: "info" as const,
             },
           ];
-          await AsyncStorage.setItem(
-            "notifications",
-            JSON.stringify(defaultNotifications)
-          );
           setNotifications(defaultNotifications);
+          await AsyncStorage.setItem("notifications", JSON.stringify(defaultNotifications));
         }
-      } catch (storageError) {
-        console.error(
-          "Error loading notifications from storage:",
-          storageError
-        );
       }
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadNotifications();
+    setRefreshing(false);
+  }, [loadNotifications]);
 
   const handleDelete = async (id: string) => {
-    if (!token) return;
+    // Optimistically update UI first
+    const updatedNotifications = notifications.filter(
+      (notification) => notification.id !== id
+    );
+    setNotifications(updatedNotifications);
 
+    // Save to local storage immediately
     try {
-      // Delete from backend
-      await apiRequest(`/notifications/${id}`, "DELETE", null, token);
-
-      // Update local state
-      const updatedNotifications = notifications.filter(
-        (notification) => notification.id !== id
-      );
-      setNotifications(updatedNotifications);
-
-      // Also update local storage as fallback
       await AsyncStorage.setItem(
         "notifications",
         JSON.stringify(updatedNotifications)
       );
     } catch (error) {
-      console.error("Error deleting notification:", error);
+      console.log("Error saving to storage:", error);
+    }
+
+    // Try to delete from backend (don't block UI or show errors)
+    if (token && !id.startsWith('default-')) {
+      try {
+        await apiRequest(`/notifications/${id}`, "DELETE", null, token);
+      } catch (error) {
+        // Silently fail - notification is already removed from local storage
+        console.log("Backend delete failed (notification removed locally):", error);
+      }
     }
   };
 
@@ -241,126 +247,173 @@ export default function Notification() {
   };
 
   return (
-    <ScrollView style={styles(theme).container}>
-      <View style={styles(theme).header}>
-        <Text style={styles(theme).headerTitle}>Notifications</Text>
-        {notifications.length > 0 && (
-          <TouchableOpacity
-            style={styles(theme).clearAllButton}
-            onPress={clearAllNotifications}
-          >
-            <Text style={styles(theme).clearAllText}>Clear All</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+      {/* Gradient Header */}
+      <LinearGradient
+        colors={isDark ? Colors.gradients.primaryDark : Colors.gradients.primary}
+        style={styles.header}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          {notifications.length > 0 && (
+            <TouchableOpacity
+              style={styles.clearAllButton}
+              onPress={clearAllNotifications}
+            >
+              <Feather name="trash" size={20} color="rgba(255,255,255,0.8)" />
+            </TouchableOpacity>
+          )}
+        </View>
+        <Text style={styles.headerSubtitle}>
+          {notifications.length} notification{notifications.length !== 1 ? 's' : ''}
+        </Text>
+      </LinearGradient>
 
-      <View style={styles(theme).notificationList}>
-        {notifications.length > 0 ? (
-          notifications.map((notification) => (
-            <NotificationItem
-              key={notification.id}
-              {...notification}
-              onDelete={handleDelete}
-            />
-          ))
-        ) : (
-          <View style={styles(theme).emptyState}>
-            <Feather
-              name="bell-off"
-              size={48}
-              color={theme === "dark" ? "#B0BEC5" : "#757575"}
-            />
-            <Text style={styles(theme).emptyStateText}>
-              No notifications yet
-            </Text>
-          </View>
-        )}
-      </View>
-    </ScrollView>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={isDark ? "#fff" : Colors.primary}
+            colors={[Colors.primary]}
+          />
+        }
+      >
+        <View style={styles.notificationList}>
+          {notifications.length > 0 ? (
+            notifications.map((notification) => (
+              <NotificationItem
+                key={notification.id}
+                {...notification}
+                onDelete={handleDelete}
+              />
+            ))
+          ) : (
+            <View style={[styles.emptyState, { backgroundColor: themeColors.surface }]}>
+              <View style={[styles.emptyIcon, { backgroundColor: withAlpha(Colors.primary, 0.1) }]}>
+                <Feather name="bell-off" size={32} color={Colors.primary} />
+              </View>
+              <Text style={[styles.emptyStateTitle, { color: themeColors.text }]}>
+                All caught up!
+              </Text>
+              <Text style={[styles.emptyStateText, { color: themeColors.textSecondary }]}>
+                You have no notifications at the moment
+              </Text>
+            </View>
+          )}
+        </View>
+        
+        {/* Bottom spacing */}
+        <View style={{ height: 100 }} />
+      </ScrollView>
+    </View>
   );
 }
 
-const styles = (colorScheme: "light" | "dark") =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colorScheme === "dark" ? "#000000" : "#ffffff",
-    },
-    header: {
-      padding: 20,
-      paddingTop: 40,
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-    },
-    headerTitle: {
-      fontSize: 28,
-      fontWeight: "bold",
-      color: colorScheme === "dark" ? "#ffffff" : "#000000",
-      marginBottom: 16,
-    },
-    clearAllButton: {
-      padding: 8,
-    },
-    clearAllText: {
-      color: "#FF5252",
-      fontSize: 16,
-      fontWeight: "500",
-    },
-    notificationList: {
-      padding: 16,
-    },
-    notificationItem: {
-      flexDirection: "row",
-      backgroundColor: colorScheme === "dark" ? "#1a1a1a" : "#f5f5f5",
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 12,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: colorScheme === "dark" ? 0.3 : 0.1,
-      shadowRadius: 4,
-      elevation: 4,
-    },
-    iconContainer: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      justifyContent: "center",
-      alignItems: "center",
-      marginRight: 16,
-    },
-    contentContainer: {
-      flex: 1,
-    },
-    title: {
-      fontSize: 16,
-      fontWeight: "600",
-      color: colorScheme === "dark" ? "#ffffff" : "#000000",
-      marginBottom: 4,
-    },
-    message: {
-      fontSize: 14,
-      color: colorScheme === "dark" ? "#B0BEC5" : "#757575",
-      marginBottom: 8,
-      lineHeight: 20,
-    },
-    time: {
-      fontSize: 12,
-      color: colorScheme === "dark" ? "#78909C" : "#9E9E9E",
-    },
-    deleteButton: {
-      padding: 8,
-      justifyContent: "center",
-    },
-    emptyState: {
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 32,
-    },
-    emptyStateText: {
-      marginTop: 16,
-      fontSize: 16,
-      color: colorScheme === "dark" ? "#B0BEC5" : "#757575",
-    },
-  });
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    paddingTop: Platform.OS === 'ios' ? 50 : 40,
+    paddingBottom: 24,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 4,
+  },
+  clearAllButton: {
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 10,
+  },
+  scrollView: {
+    flex: 1,
+    marginTop: -15,
+  },
+  notificationList: {
+    padding: 16,
+    paddingTop: 24,
+  },
+  notificationItem: {
+    flexDirection: "row",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+  },
+  contentContainer: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  message: {
+    fontSize: 14,
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  time: {
+    fontSize: 12,
+  },
+  deleteButton: {
+    padding: 8,
+    justifyContent: "center",
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 40,
+    borderRadius: 20,
+    marginTop: 20,
+  },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+});
