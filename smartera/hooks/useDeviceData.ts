@@ -150,6 +150,7 @@ export function useRooms() {
   const { token } = useAuth();
   const [rooms, setRooms] = useState<{ roomId: number; name: string; icon?: string }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const loadRooms = useCallback(async () => {
     if (!token) return;
@@ -166,11 +167,24 @@ export function useRooms() {
     }
   }, [token]);
 
+  const createRoom = useCallback(async (name: string, icon?: string) => {
+    if (!token) throw new Error('Not authenticated');
+
+    try {
+      setCreating(true);
+      const newRoom = await deviceService.createRoom({ name, icon }, token);
+      setRooms(prev => [...prev, newRoom]);
+      return newRoom;
+    } finally {
+      setCreating(false);
+    }
+  }, [token]);
+
   useEffect(() => {
     loadRooms();
   }, [loadRooms]);
 
-  return { rooms, loading, refresh: loadRooms };
+  return { rooms, loading, creating, refresh: loadRooms, createRoom };
 }
 
 // Hook for single device with real-time telemetry

@@ -99,14 +99,23 @@ export const deviceService = {
     return apiRequest(`/device/${deviceId}/control`, 'POST', { action }, token);
   },
 
-  // Get all rooms for the user (GET /api/room)
+  // Get all rooms for the user (GET /api/rooms)
   async getRooms(token: string): Promise<{ roomId: number; name: string; icon?: string }[]> {
     try {
-      const response = await apiRequest('/room', 'GET', undefined, token);
+      const response = await apiRequest('/rooms', 'GET', undefined, token);
       return response.rooms || response || [];
     } catch {
       return [];
     }
+  },
+
+  // Create a new room (POST /api/rooms)
+  async createRoom(
+    roomData: { name: string; icon?: string },
+    token: string
+  ): Promise<{ roomId: number; name: string; icon?: string }> {
+    const response = await apiRequest('/rooms', 'POST', roomData, token);
+    return response.room || response;
   },
 
   // Add new device (POST /api/device)
