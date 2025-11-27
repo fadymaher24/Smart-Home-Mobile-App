@@ -78,6 +78,18 @@ const DEVICE_TYPES: DeviceTypeOption[] = [
 
 const { width, height } = Dimensions.get("window");
 
+// Suggested rooms for quick selection
+const SUGGESTED_ROOMS = [
+  { name: 'Living Room', icon: 'sofa', color: '#4CAF50' },
+  { name: 'Bedroom', icon: 'bed', color: '#2196F3' },
+  { name: 'Kitchen', icon: 'silverware-fork-knife', color: '#FF9800' },
+  { name: 'Bathroom', icon: 'shower', color: '#00BCD4' },
+  { name: 'Office', icon: 'desk', color: '#9C27B0' },
+  { name: 'Garage', icon: 'garage', color: '#607D8B' },
+  { name: 'Garden', icon: 'flower', color: '#8BC34A' },
+  { name: 'Dining Room', icon: 'table-furniture', color: '#795548' },
+];
+
 // Animated Device Card Component
 const DeviceCard = ({
   device,
@@ -243,12 +255,16 @@ const AddDeviceModal = ({
   onAdd,
   loading,
   rooms,
+  onCreateRoom,
+  creatingRoom,
 }: {
   visible: boolean;
   onClose: () => void;
   onAdd: (data: { serialNumber: string; name: string; type: DeviceType; roomId?: number }) => void;
   loading: boolean;
   rooms: Room[];
+  onCreateRoom: (name: string) => Promise<Room>;
+  creatingRoom: boolean;
 }) => {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -257,6 +273,8 @@ const AddDeviceModal = ({
   const [serialNumber, setSerialNumber] = useState('');
   const [deviceName, setDeviceName] = useState('');
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
+  const [showNewRoomInput, setShowNewRoomInput] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -267,6 +285,8 @@ const AddDeviceModal = ({
       setSerialNumber('');
       setDeviceName('');
       setSelectedRoomId(null);
+      setShowNewRoomInput(false);
+      setNewRoomName('');
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 1,
@@ -286,6 +306,19 @@ const AddDeviceModal = ({
     }
   }, [visible]);
 
+  const handleCreateRoom = async () => {
+    if (!newRoomName.trim()) return;
+    
+    try {
+      const newRoom = await onCreateRoom(newRoomName.trim());
+      setSelectedRoomId(newRoom.roomId);
+      setShowNewRoomInput(false);
+      setNewRoomName('');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to create room');
+    }
+  };
+
   const handleNext = () => {
     if (step === 1 && selectedType) {
       Animated.sequence([
@@ -304,9 +337,10 @@ const AddDeviceModal = ({
       setStep(2);
     } else if (step === 2 && serialNumber.trim()) {
       setStep(3);
-    } else if (step === 3 && deviceName.trim()) {
+    } else if (step === 3) {
+      // Room selection is optional, can continue without selecting
       setStep(4);
-    } else if (step === 4 && selectedType) {
+    } else if (step === 4 && deviceName.trim() && selectedType) {
       onAdd({
         serialNumber: serialNumber.trim(),
         name: deviceName.trim(),
@@ -317,7 +351,10 @@ const AddDeviceModal = ({
   };
 
   const handleBack = () => {
-    if (step > 1) {
+    if (showNewRoomInput) {
+      setShowNewRoomInput(false);
+      setNewRoomName('');
+    } else if (step > 1) {
       setStep(step - 1);
     } else {
       onClose();
@@ -434,81 +471,178 @@ const AddDeviceModal = ({
   const renderStep3 = () => (
     <View style={styles.stepContainer}>
       <Text style={[styles.stepTitle, { color: isDark ? '#fff' : '#333' }]}>
-        Select Room
+        {showNewRoomInput ? 'Create New Room' : 'Assign to Room'}
       </Text>
       <Text style={[styles.stepSubtitle, { color: isDark ? '#888' : '#666' }]}>
-        Choose which room this device belongs to
+        {showNewRoomInput 
+          ? 'Select a suggestion or enter a custom name'
+          : 'Choose which room this device belongs to (Optional)'}
       </Text>
 
-      <View style={styles.roomsGrid}>
-        {/* No Room Option */}
-        <TouchableOpacity
-          style={[
-            styles.roomCard,
-            {
-              backgroundColor: !selectedRoomId
-                ? 'rgba(76, 175, 80, 0.2)'
-                : isDark ? '#1a1a1a' : '#f5f5f5',
-              borderColor: !selectedRoomId ? '#4CAF50' : 'transparent',
-              borderWidth: 2,
-            },
-          ]}
-          onPress={() => setSelectedRoomId(null)}
-        >
-          <View style={[styles.roomIconContainer, { backgroundColor: '#9E9E9E' }]}>
-            <MaterialCommunityIcons name="home-outline" size={28} color="#fff" />
-          </View>
-          <Text style={[styles.roomName, { color: isDark ? '#fff' : '#333' }]}>
-            No Room
+      {showNewRoomInput ? (
+        /* Create New Room Input */
+        <View style={styles.newRoomContainer}>
+          {/* Suggested Rooms */}
+          <Text style={[styles.suggestedLabel, { color: isDark ? '#888' : '#666' }]}>
+            Quick Select
           </Text>
-          {!selectedRoomId && (
-            <View style={styles.roomCheckmark}>
-              <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-            </View>
-          )}
-        </TouchableOpacity>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.suggestedRoomsScroll}
+            contentContainerStyle={styles.suggestedRoomsContainer}
+          >
+            {SUGGESTED_ROOMS.filter(
+              suggestion => !rooms.some(r => r.name.toLowerCase() === suggestion.name.toLowerCase())
+            ).map((suggestion) => (
+              <TouchableOpacity
+                key={suggestion.name}
+                style={[
+                  styles.suggestedRoomCard,
+                  {
+                    backgroundColor: newRoomName === suggestion.name
+                      ? 'rgba(76, 175, 80, 0.2)'
+                      : isDark ? '#1a1a1a' : '#f5f5f5',
+                    borderColor: newRoomName === suggestion.name ? '#4CAF50' : 'transparent',
+                  },
+                ]}
+                onPress={() => setNewRoomName(suggestion.name)}
+              >
+                <View style={[styles.suggestedRoomIcon, { backgroundColor: suggestion.color }]}>
+                  <MaterialCommunityIcons name={suggestion.icon as any} size={20} color="#fff" />
+                </View>
+                <Text style={[styles.suggestedRoomName, { color: isDark ? '#fff' : '#333' }]}>
+                  {suggestion.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
 
-        {/* Room Options */}
-        {rooms.map((room) => (
+          {/* Custom Input */}
+          <Text style={[styles.suggestedLabel, { color: isDark ? '#888' : '#666', marginTop: 16 }]}>
+            Or enter custom name
+          </Text>
+          <View style={[styles.inputWrapper, { backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5' }]}>
+            <MaterialCommunityIcons
+              name="door"
+              size={24}
+              color={isDark ? '#888' : '#666'}
+            />
+            <TextInput
+              style={[styles.textInput, { color: isDark ? '#fff' : '#333' }]}
+              placeholder="e.g., Guest Room, Office..."
+              placeholderTextColor={isDark ? '#555' : '#999'}
+              value={newRoomName}
+              onChangeText={setNewRoomName}
+            />
+            {newRoomName.length > 0 && (
+              <TouchableOpacity onPress={() => setNewRoomName('')}>
+                <Ionicons name="close-circle" size={20} color={isDark ? '#555' : '#999'} />
+              </TouchableOpacity>
+            )}
+          </View>
+          
           <TouchableOpacity
-            key={room.roomId}
+            style={[
+              styles.createRoomButton,
+              {
+                backgroundColor: newRoomName.trim() ? '#4CAF50' : '#888',
+                opacity: creatingRoom ? 0.7 : 1,
+              },
+            ]}
+            onPress={handleCreateRoom}
+            disabled={!newRoomName.trim() || creatingRoom}
+          >
+            {creatingRoom ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Ionicons name="add-circle" size={20} color="#fff" />
+                <Text style={styles.createRoomButtonText}>Create Room</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      ) : (
+        /* Room Selection Grid */
+        <View style={styles.roomsGrid}>
+          {/* Skip for now / No Room Option */}
+          <TouchableOpacity
             style={[
               styles.roomCard,
               {
-                backgroundColor: selectedRoomId === room.roomId
+                backgroundColor: !selectedRoomId
                   ? 'rgba(76, 175, 80, 0.2)'
                   : isDark ? '#1a1a1a' : '#f5f5f5',
-                borderColor: selectedRoomId === room.roomId ? '#4CAF50' : 'transparent',
+                borderColor: !selectedRoomId ? '#4CAF50' : 'transparent',
                 borderWidth: 2,
               },
             ]}
-            onPress={() => setSelectedRoomId(room.roomId)}
+            onPress={() => setSelectedRoomId(null)}
           >
-            <View style={[styles.roomIconContainer, { backgroundColor: '#2196F3' }]}>
-              <MaterialCommunityIcons name={(room.icon || 'door') as any} size={28} color="#fff" />
+            <View style={[styles.roomIconContainer, { backgroundColor: '#9E9E9E' }]}>
+              <MaterialCommunityIcons name="skip-forward" size={28} color="#fff" />
             </View>
             <Text style={[styles.roomName, { color: isDark ? '#fff' : '#333' }]}>
-              {room.name}
+              Skip for now
             </Text>
-            {selectedRoomId === room.roomId && (
+            {!selectedRoomId && (
               <View style={styles.roomCheckmark}>
                 <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
               </View>
             )}
           </TouchableOpacity>
-        ))}
-      </View>
 
-      {rooms.length === 0 && (
-        <View style={styles.noRoomsMessage}>
-          <MaterialCommunityIcons 
-            name="home-alert" 
-            size={48} 
-            color={isDark ? '#555' : '#ccc'} 
-          />
-          <Text style={[styles.noRoomsText, { color: isDark ? '#888' : '#666' }]}>
-            No rooms configured yet.{'\n'}You can add the device without a room.
-          </Text>
+          {/* Room Options */}
+          {rooms.map((room) => (
+            <TouchableOpacity
+              key={room.roomId}
+              style={[
+                styles.roomCard,
+                {
+                  backgroundColor: selectedRoomId === room.roomId
+                    ? 'rgba(76, 175, 80, 0.2)'
+                    : isDark ? '#1a1a1a' : '#f5f5f5',
+                  borderColor: selectedRoomId === room.roomId ? '#4CAF50' : 'transparent',
+                  borderWidth: 2,
+                },
+              ]}
+              onPress={() => setSelectedRoomId(room.roomId)}
+            >
+              <View style={[styles.roomIconContainer, { backgroundColor: '#2196F3' }]}>
+                <MaterialCommunityIcons name={(room.icon || 'door') as any} size={28} color="#fff" />
+              </View>
+              <Text style={[styles.roomName, { color: isDark ? '#fff' : '#333' }]}>
+                {room.name}
+              </Text>
+              {selectedRoomId === room.roomId && (
+                <View style={styles.roomCheckmark}>
+                  <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+
+          {/* Create New Room Button */}
+          <TouchableOpacity
+            style={[
+              styles.roomCard,
+              {
+                backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5',
+                borderColor: '#FF9800',
+                borderWidth: 2,
+                borderStyle: 'dashed',
+              },
+            ]}
+            onPress={() => setShowNewRoomInput(true)}
+          >
+            <View style={[styles.roomIconContainer, { backgroundColor: '#FF9800' }]}>
+              <Ionicons name="add" size={28} color="#fff" />
+            </View>
+            <Text style={[styles.roomName, { color: '#FF9800' }]}>
+              + Create New
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -876,7 +1010,7 @@ export default function DeviceActive() {
     addDevice,
     removeDevice,
   } = useDevices();
-  const { rooms } = useRooms();
+  const { rooms, createRoom, creating: creatingRoom } = useRooms();
 
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<ServiceDevice | null>(null);
@@ -887,6 +1021,11 @@ export default function DeviceActive() {
     setRefreshing(true);
     await refresh();
     setRefreshing(false);
+  };
+
+  const handleCreateRoom = async (name: string): Promise<Room> => {
+    const newRoom = await createRoom(name);
+    return newRoom;
   };
 
   const handleAddDevice = async (data: { serialNumber: string; name: string; type: DeviceType; roomId?: number }) => {
@@ -1071,6 +1210,8 @@ export default function DeviceActive() {
         onAdd={handleAddDevice}
         loading={addingDevice}
         rooms={rooms}
+        onCreateRoom={handleCreateRoom}
+        creatingRoom={creatingRoom}
       />
 
       <DeviceDetailsModal
@@ -1558,6 +1699,58 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     lineHeight: 20,
+  },
+  // New room creation styles
+  newRoomContainer: {
+    marginTop: 16,
+  },
+  suggestedLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  suggestedRoomsScroll: {
+    marginHorizontal: -20,
+  },
+  suggestedRoomsContainer: {
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  suggestedRoomCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    gap: 8,
+  },
+  suggestedRoomIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  suggestedRoomName: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  createRoomButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 16,
+    marginTop: 16,
+    gap: 8,
+  },
+  createRoomButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   // Details modal styles
   detailsModal: {
