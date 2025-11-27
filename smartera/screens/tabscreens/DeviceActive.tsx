@@ -254,6 +254,7 @@ const AddDeviceModal = ({
   const [selectedType, setSelectedType] = useState<DeviceType | null>(null);
   const [serialNumber, setSerialNumber] = useState('');
   const [deviceName, setDeviceName] = useState('');
+  const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -263,6 +264,7 @@ const AddDeviceModal = ({
       setSelectedType(null);
       setSerialNumber('');
       setDeviceName('');
+      setSelectedRoomId(null);
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 1,
@@ -300,11 +302,14 @@ const AddDeviceModal = ({
       setStep(2);
     } else if (step === 2 && serialNumber.trim()) {
       setStep(3);
-    } else if (step === 3 && deviceName.trim() && selectedType) {
+    } else if (step === 3 && deviceName.trim()) {
+      setStep(4);
+    } else if (step === 4 && selectedType) {
       onAdd({
         serialNumber: serialNumber.trim(),
         name: deviceName.trim(),
         type: selectedType,
+        roomId: selectedRoomId || undefined,
       });
     }
   };
