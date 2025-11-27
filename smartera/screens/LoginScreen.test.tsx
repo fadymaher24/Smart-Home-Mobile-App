@@ -1,9 +1,17 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import LoginScreen from '../LoginScreen';
+import { render, screen } from '@testing-library/react-native';
+import LoginScreen from './LoginScreen';
+import { ThemeProvider } from '../context/ThemeContext';
+import { AuthProvider } from '../context/AuthContext';
 
 test('renders LoginScreen component', () => {
-    render(<LoginScreen />);
-    const linkElement = screen.getByText(/login/i);
-    expect(linkElement).toBeInTheDocument();
+    render(
+        <ThemeProvider>
+            <AuthProvider>
+                <LoginScreen />
+            </AuthProvider>
+        </ThemeProvider>
+    );
+    const element = screen.getByText(/login/i);
+    expect(element).toBeTruthy();
 });
