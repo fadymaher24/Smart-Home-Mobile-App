@@ -1,13 +1,21 @@
 import React, { useEffect, useRef } from "react";
 import "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
-import { useColorScheme, Animated, Dimensions, Platform } from "react-native";
-import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
+import {
+  useColorScheme,
+  Animated,
+  Dimensions,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
-const { width, height } = Dimensions.get("window");
+const { height } = Dimensions.get("window");
 
 // Unified Colors
 const Colors = {
@@ -63,7 +71,7 @@ export default function Welcome() {
         }),
       ])
     ).start();
-  }, []);
+  }, [fadeAnim, slideAnim, scaleAnim, iconFloat]);
 
   return (
     <LinearGradient
@@ -125,7 +133,7 @@ export default function Welcome() {
         <Text style={styles.title}>Welcome Home</Text>
         <Text style={styles.subtitle}>
           No matter how far you go, home will always be your destination to return to.
-          Let's make your home smarter and more comfortable.
+          Let&apos;s make your home smarter and more comfortable.
         </Text>
 
         {/* Feature Pills */}

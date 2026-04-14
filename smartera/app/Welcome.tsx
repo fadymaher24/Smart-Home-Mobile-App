@@ -2,8 +2,6 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 
-import { createDrawerNavigator } from "@react-navigation/drawer";
-
 import "react-native-gesture-handler";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
@@ -21,25 +19,6 @@ import PowerUsage from "../screens/tabscreens/PowerUsage";
 import LoginScreen from "../screens/LoginScreen";
 
 const HomeStack = createNativeStackNavigator();
-const drawer = createDrawerNavigator();
-
-function drawerScreen() {
-  return (
-    <drawer.Navigator screenOptions={{ headerShown: false }}>
-      <drawer.Screen name="MainHome" component={HomeStackScreen} />
-      <drawer.Screen
-        name="Settings"
-        component={Settings}
-        options={{ headerShown: true }}
-      />
-      <drawer.Screen
-        name="Notification"
-        component={Notification}
-        options={{ headerShown: true }}
-      />
-    </drawer.Navigator>
-  );
-}
 
 function HomeStackScreen() {
   return (
