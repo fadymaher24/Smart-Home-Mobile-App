@@ -1,17 +1,30 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Platform, PermissionsAndroid, Linking, Alert } from 'react-native';
 import { DiscoveredDevice } from '../context/ProvisioningContext';
+import { apiRequest } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 const DEVICE_SSID_PATTERN = /^(SmartPlug|SmartBulb|SmartSwitch|Thermostat|Sensor)-([A-Fa-f0-9]{6,12})$/;
+
+const DEVICE_AP_PASSWORD = 'smartplug123';
+const DEVICE_AP_IP = '192.168.4.1';
+const DEVICE_AP_PORT = 80;
+
+type ScanMode = 'idle' | 'scanning' | 'connecting' | 'sending' | 'error' | 'complete';
 
 interface UseWifiScanReturn {
   devices: DiscoveredDevice[];
   isScanning: boolean;
   error: string | null;
+  scanMode: ScanMode;
   startScan: () => Promise<void>;
   stopScan: () => void;
   hasPermission: boolean;
   requestPermission: () => Promise<boolean>;
+  sendCredentialsToAP: (device: DiscoveredDevice, ssid: string, password: string) => Promise<boolean>;
+  storeCredentialsOnServer: (serialNumber: string, ssid: string, password: string) => Promise<boolean>;
+  sendProvisioningToken: (device: DiscoveredDevice, token: string) => Promise<boolean>;
+  parseDeviceSSID: (ssid: string) => DiscoveredDevice | null;
 }
 
 const PERMISSION_TITLE = 'Location Permission Required';
@@ -22,6 +35,8 @@ export function useWifiScan(): UseWifiScanReturn {
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState(false);
+  const [scanMode, setScanMode] = useState<ScanMode>('idle');
+  const { token } = useAuth();
 
   useEffect(() => {
     checkPermission();
@@ -29,10 +44,18 @@ export function useWifiScan(): UseWifiScanReturn {
 
   const checkPermission = async () => {
     if (Platform.OS === 'android') {
-      const granted = await PermissionsAndroid.check(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-      );
-      setHasPermission(granted);
+      const androidSdk = Platform.Version as number;
+      if (androidSdk >= 33) {
+        const nearByGranted = await PermissionsAndroid.check(
+          'android.permission.NEARBY_WIFI_DEVICES' as any
+        );
+        setHasPermission(nearByGranted);
+      } else {
+        const granted = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        setHasPermission(granted);
+      }
     } else {
       setHasPermission(true);
     }
@@ -44,18 +67,34 @@ export function useWifiScan(): UseWifiScanReturn {
     }
 
     try {
-      const result = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        {
-          title: PERMISSION_TITLE,
-          message: PERMISSION_MESSAGE,
-          buttonNeutral: 'Ask Me Later',
-          buttonNegative: 'Cancel',
-          buttonPositive: 'OK',
-        }
-      );
+      const androidSdk = Platform.Version as number;
+      let permissionResult: string;
 
-      if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+      if (androidSdk >= 33) {
+        permissionResult = await PermissionsAndroid.request(
+          'android.permission.NEARBY_WIFI_DEVICES' as any,
+          {
+            title: PERMISSION_TITLE,
+            message: PERMISSION_MESSAGE,
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+      } else {
+        permissionResult = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: PERMISSION_TITLE,
+            message: PERMISSION_MESSAGE,
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+      }
+
+      if (permissionResult === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
         Alert.alert(
           'Location Permission Required',
           'Smartera needs location permission to scan for devices. Please enable it in Settings > Apps > Smartera > Permissions.',
@@ -68,7 +107,7 @@ export function useWifiScan(): UseWifiScanReturn {
         return false;
       }
 
-      const granted = result === PermissionsAndroid.RESULTS.GRANTED;
+      const granted = permissionResult === PermissionsAndroid.RESULTS.GRANTED;
       setHasPermission(granted);
       return granted;
     } catch (err) {
@@ -87,45 +126,186 @@ export function useWifiScan(): UseWifiScanReturn {
     }
 
     setIsScanning(true);
+    setScanMode('scanning');
     setError(null);
     setDevices([]);
 
     try {
-      if (Platform.OS === 'android') {
-        await simulateScan();
-      } else {
-        setError('iOS does not support WiFi scanning. Please enter device SSID manually on the connect screen.');
+      if (Platform.OS === 'web') {
+        setError('WiFi scanning is not available on web. Use "Enter Serial Number" to add a device manually, then configure WiFi credentials through the provisioning form.');
+        setIsScanning(false);
+        setScanMode('idle');
+        return;
       }
+
+      if (Platform.OS === 'ios') {
+        setError('iOS does not support WiFi scanning directly. Use "Enter Serial Number" and the app will configure the device through the provisioning server.');
+        setIsScanning(false);
+        setScanMode('idle');
+        return;
+      }
+
+      await performAndroidWifiScan();
     } catch (err) {
-      setError((err as Error).message);
+      setError((err as Error).message || 'Failed to scan for devices');
+      setScanMode('error');
     } finally {
       setIsScanning(false);
     }
   };
 
-  const simulateScan = async () => {
-    await new Promise(resolve => setTimeout(resolve, 2000));
+  const performAndroidWifiScan = async () => {
+    try {
+      const WifiScanner = require('react-native-wifi-reimagined')?.WifiScanner;
+      if (!WifiScanner) {
+        throw new Error('WiFi scanning module not available');
+      }
 
-    const mockDevices: DiscoveredDevice[] = [
-      {
-        ssid: 'SmartPlug-B0A732',
-        deviceType: 'SmartPlug',
-        serialSuffix: 'B0A732',
-        signalStrength: -45,
-      },
-      {
-        ssid: 'SmartBulb-A1B2C3',
-        deviceType: 'SmartBulb',
-        serialSuffix: 'A1B2C3',
-        signalStrength: -60,
-      },
-    ];
+      const results = await WifiScanner.scan();
+      const smartDevices: DiscoveredDevice[] = [];
 
-    setDevices(mockDevices);
+      for (const network of results) {
+        const match = network.SSID?.match(DEVICE_SSID_PATTERN);
+        if (match) {
+          smartDevices.push({
+            ssid: network.SSID,
+            deviceType: match[1],
+            serialSuffix: match[2],
+            signalStrength: network.level || -50,
+          });
+        }
+      }
+
+      smartDevices.sort((a, b) => b.signalStrength - a.signalStrength);
+      setDevices(smartDevices);
+
+      if (smartDevices.length === 0) {
+        setError('No Smartera devices found nearby. Make sure your device is powered on and in setup mode (LED flashing rapidly).');
+        setScanMode('error');
+      } else {
+        setScanMode('idle');
+      }
+    } catch (err: any) {
+      if (err.message?.includes('not available') || err.message?.includes('Cannot read')) {
+        setError('WiFi scanning requires a native module. On web or iOS, please use manual serial number entry instead.');
+        setScanMode('idle');
+        return;
+      }
+      throw err;
+    }
+  };
+
+  const sendCredentialsToAP = async (
+    device: DiscoveredDevice,
+    ssid: string,
+    password: string
+  ): Promise<boolean> => {
+    if (Platform.OS === 'web' || Platform.OS === 'ios') {
+      return false;
+    }
+
+    setScanMode('connecting');
+    setError(null);
+
+    try {
+      const WifiApi = require('react-native-wifi-reimagined')?.default;
+      if (!WifiApi) {
+        throw new Error('WiFi module not available');
+      }
+
+      await WifiApi.connectToProtectedSSID(device.ssid, DEVICE_AP_PASSWORD, false);
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      setScanMode('sending');
+
+      const response = await fetch(
+        `http://${DEVICE_AP_IP}:${DEVICE_AP_PORT}/api/wifi/credentials`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `ssid=${encodeURIComponent(ssid)}&password=${encodeURIComponent(password)}`,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Device returned status ${response.status}`);
+      }
+
+      setScanMode('complete');
+      return true;
+    } catch (err: any) {
+      setError(`Failed to send credentials to device: ${err.message}`);
+      setScanMode('error');
+
+      try {
+        const savedNetworks = require('react-native-wifi-reimagined')?.default;
+        if (savedNetworks?.disconnectFromSSID) {
+          await savedNetworks.disconnectFromSSID(device.ssid);
+        }
+      } catch {}
+
+      return false;
+    }
+  };
+
+  const sendProvisioningToken = async (
+    device: DiscoveredDevice,
+    provisioningToken: string
+  ): Promise<boolean> => {
+    if (Platform.OS === 'web' || Platform.OS === 'ios') {
+      return false;
+    }
+
+    try {
+      const response = await fetch(
+        `http://${DEVICE_AP_IP}:${DEVICE_AP_PORT}/api/wifi/credentials`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `ssid=&password=&token=${encodeURIComponent(provisioningToken)}`,
+        }
+      );
+
+      return response.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const storeCredentialsOnServer = async (
+    serialNumber: string,
+    ssid: string,
+    password: string
+  ): Promise<boolean> => {
+    if (!token) {
+      setError('You must be logged in to provision a device');
+      setScanMode('error');
+      return false;
+    }
+
+    setScanMode('sending');
+    setError(null);
+
+    try {
+      await apiRequest('/provisioning/pending', 'POST', {
+        deviceSerialNumber: serialNumber,
+        ssid,
+        password,
+      }, token);
+
+      setScanMode('complete');
+      return true;
+    } catch (err: any) {
+      setError(err.message || 'Failed to store WiFi credentials');
+      setScanMode('error');
+      return false;
+    }
   };
 
   const stopScan = () => {
     setIsScanning(false);
+    setScanMode('idle');
   };
 
   const parseDeviceSSID = (ssid: string): DiscoveredDevice | null => {
@@ -146,10 +326,15 @@ export function useWifiScan(): UseWifiScanReturn {
     devices,
     isScanning,
     error,
+    scanMode,
     startScan,
     stopScan,
     hasPermission,
     requestPermission,
+    sendCredentialsToAP,
+    storeCredentialsOnServer,
+    sendProvisioningToken,
+    parseDeviceSSID,
   };
 }
 

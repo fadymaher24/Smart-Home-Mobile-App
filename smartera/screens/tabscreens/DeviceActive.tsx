@@ -20,8 +20,13 @@ import { BlurView } from "expo-blur";
 import { useTheme } from "../../context/ThemeContext";
 import { Colors } from "../../utils/colors";
 import { useDevices, useRealtimeConnection, useRooms } from "../../hooks/useDeviceData";
+import { useAuth } from "../../context/AuthContext";
+import { apiRequest, ApiError } from "../../utils/api";
 import { Device as ServiceDevice } from "../../services/deviceService";
+import { getCurrentWiFiSSID, parseSerialFromQRCode } from "../../utils/wifi";
+import { useBleProvisioning } from "../../hooks/useBleProvisioning";
 import { MaterialCommunityIcons, Ionicons, Feather } from "@expo/vector-icons";
+import QRScan from "./QRScan";
 
 // Device types matching backend
 type DeviceType = 'SMART_PLUG' | 'RGB_LIGHT' | 'THERMOSTAT' | 'SENSOR';
@@ -258,6 +263,7 @@ const AddDeviceModal = ({
   rooms,
   onCreateRoom,
   creatingRoom,
+  onProvisionWifi,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -266,6 +272,7 @@ const AddDeviceModal = ({
   rooms: Room[];
   onCreateRoom: (name: string, icon?: string) => Promise<Room>;
   creatingRoom: boolean;
+  onProvisionWifi?: () => void;
 }) => {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -276,6 +283,25 @@ const AddDeviceModal = ({
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
   const [showNewRoomInput, setShowNewRoomInput] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
+  const [showProvisionForm, setShowProvisionForm] = useState(false);
+  const [provisionSsid, setProvisionSsid] = useState('');
+  const [provisionPassword, setProvisionPassword] = useState('');
+  const [provisionError, setProvisionError] = useState<string | null>(null);
+  const [provisionSending, setProvisionSending] = useState(false);
+  const [autoSsid, setAutoSsid] = useState<string | null>(null);
+  const [scanningQR, setScanningQR] = useState(false);
+  const [useBlePairing, setUseBlePairing] = useState(false);
+  const [bleProgressMessage, setBleProgressMessage] = useState<string | null>(null);
+  const { token } = useAuth();
+  const {
+    isSupported: bleSupported,
+    discoverNearbyPlugs,
+    provisionViaBle,
+    isScanning: bleScanning,
+    isProvisioning: bleProvisioning,
+    error: bleError,
+    clearError: clearBleError,
+  } = useBleProvisioning();
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -288,6 +314,16 @@ const AddDeviceModal = ({
       setSelectedRoomId(null);
       setShowNewRoomInput(false);
       setNewRoomName('');
+      setShowProvisionForm(false);
+      setProvisionSsid('');
+      setProvisionPassword('');
+      setProvisionError(null);
+      setProvisionSending(false);
+      setUseBlePairing(false);
+      setBleProgressMessage(null);
+      clearBleError();
+      setScanningQR(false);
+      detectWifiSSID();
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 1,
@@ -358,6 +394,13 @@ const AddDeviceModal = ({
   };
 
   const handleBack = () => {
+    if (showProvisionForm) {
+      setShowProvisionForm(false);
+      setProvisionError(null);
+      setBleProgressMessage(null);
+      clearBleError();
+      return;
+    }
     if (showNewRoomInput) {
       setShowNewRoomInput(false);
       setNewRoomName('');
@@ -365,6 +408,106 @@ const AddDeviceModal = ({
       setStep(step - 1);
     } else {
       onClose();
+    }
+  };
+
+  const detectWifiSSID = async () => {
+      try {
+        const ssid = await getCurrentWiFiSSID();
+        if (ssid) {
+          setAutoSsid(ssid);
+          setProvisionSsid(ssid);
+        }
+      } catch {}
+    };
+
+  const handleBarCodeScanned = (data: string) => {
+    const parsed = parseSerialFromQRCode(data);
+    if (parsed) {
+      setSerialNumber(parsed.serialNumber);
+      if (parsed.type) {
+        const typeMap: Record<string, DeviceType> = {
+          'SMART_PLUG': 'SMART_PLUG',
+          'RGB_LIGHT': 'RGB_LIGHT',
+          'THERMOSTAT': 'THERMOSTAT',
+          'SENSOR': 'SENSOR',
+          'SmartPlug': 'SMART_PLUG',
+          'SmartBulb': 'RGB_LIGHT',
+          'SmartSwitch': 'SMART_PLUG',
+          'Thermostat': 'THERMOSTAT',
+          'Sensor': 'SENSOR',
+        };
+        const mapped = typeMap[parsed.type];
+        if (mapped) setSelectedType(mapped);
+      }
+      setScanningQR(false);
+    } else {
+      setSerialNumber(data.trim());
+      setScanningQR(false);
+    }
+  };
+
+  const handleProvisionWifi = async () => {
+    if (!provisionSsid.trim() || !provisionPassword.trim()) {
+      setProvisionError('WiFi network name and password are required');
+      return;
+    }
+    if (!token) {
+      setProvisionError('You must be logged in to provision a device');
+      return;
+    }
+
+    setProvisionSending(true);
+    setProvisionError(null);
+    clearBleError();
+    setBleProgressMessage(null);
+
+    try {
+      if (useBlePairing) {
+        setBleProgressMessage('Scanning nearby plugs over Bluetooth...');
+        const plugs = await discoverNearbyPlugs(serialNumber.trim());
+        if (plugs.length === 0) {
+          throw new Error('No nearby plug found over Bluetooth. Make sure the plug is powered on and in pairing mode.');
+        }
+
+        setBleProgressMessage('Sending WiFi credentials via Smartera-Remote...');
+        await provisionViaBle({
+          serialNumber: serialNumber.trim(),
+          ssid: provisionSsid.trim(),
+          password: provisionPassword.trim(),
+          token,
+        });
+
+        setBleProgressMessage('');
+
+        Alert.alert(
+          'Bluetooth Pairing Complete',
+          `Smartera-Remote paired with "${serialNumber}" and sent WiFi credentials successfully.`,
+          [{ text: 'OK', onPress: () => {
+            setShowProvisionForm(false);
+          }}]
+        );
+        return;
+      }
+
+      await apiRequest('/provisioning/pending', 'POST', {
+        deviceSerialNumber: serialNumber.trim(),
+        ssid: provisionSsid.trim(),
+        password: provisionPassword.trim(),
+      }, token);
+
+      Alert.alert(
+        'WiFi Credentials Sent',
+        `WiFi credentials have been sent to device "${serialNumber}". Power on the device to complete setup.`,
+        [{ text: 'OK', onPress: () => {
+          setShowProvisionForm(false);
+          onClose();
+        }}]
+      );
+    } catch (err: any) {
+      setProvisionError(err?.message || 'Failed to send WiFi credentials');
+    } finally {
+      setProvisionSending(false);
     }
   };
 
@@ -431,7 +574,7 @@ const AddDeviceModal = ({
         Device Serial Number
       </Text>
       <Text style={[styles.stepSubtitle, { color: isDark ? '#888' : '#666' }]}>
-        Enter the serial number (MAC address) from your device
+        Enter the serial number or scan the QR code on your device
       </Text>
 
       <View style={styles.inputContainer}>
@@ -450,27 +593,199 @@ const AddDeviceModal = ({
             autoCapitalize="characters"
             autoCorrect={false}
           />
+          {Platform.OS !== 'web' && (
+            <TouchableOpacity
+              onPress={() => setScanningQR(true)}
+              style={styles.qrButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="qr-code" size={24} color={Colors.primary} />
+            </TouchableOpacity>
+          )}
         </View>
         <Text style={[styles.inputHint, { color: isDark ? '#666' : '#888' }]}>
           Usually found on the device label or packaging
         </Text>
       </View>
 
+      {/* Quick Provision with WiFi - Tuya-like flow */}
+      {serialNumber.trim() && !showProvisionForm && !scanningQR && (
+        <>
+          {bleSupported && Platform.OS !== 'web' && (
+            <TouchableOpacity
+              style={[styles.wifiProvisionButton, { backgroundColor: '#0F766E' }]}
+              onPress={() => {
+                if (!autoSsid) {
+                  detectWifiSSID();
+                }
+                setUseBlePairing(true);
+                setShowProvisionForm(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="bluetooth" size={20} color="#fff" />
+              <View style={styles.wifiProvisionButtonTextContainer}>
+                <Text style={styles.wifiProvisionButtonText}>Bluetooth Pairing</Text>
+                <Text style={styles.wifiProvisionButtonSubtext}>
+                  Smartera-Remote fast pairing like Sonoff S40
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.wifiProvisionButton, { backgroundColor: Colors.primary }]}
+            onPress={() => {
+              if (!autoSsid && Platform.OS !== 'web') {
+                detectWifiSSID();
+              }
+              setUseBlePairing(false);
+              setShowProvisionForm(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="wifi" size={20} color="#fff" />
+            <View style={styles.wifiProvisionButtonTextContainer}>
+              <Text style={styles.wifiProvisionButtonText}>Set up via WiFi</Text>
+              <Text style={styles.wifiProvisionButtonSubtext}>
+                {autoSsid ? `Connect to "${autoSsid}"` : 'Send WiFi credentials to the device'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </>
+      )}
+
+      {/* WiFi Provisioning Form - Tuya-like: auto SSID + password only */}
+      {showProvisionForm && (
+        <View style={[styles.provisionForm, { backgroundColor: isDark ? '#1a1a1a' : '#f8f8f8' }]}>
+          <View style={[styles.provisionFormHeader, { borderBottomColor: isDark ? '#333' : '#eee' }]}>
+            <Ionicons name="wifi" size={24} color={Colors.primary} />
+            <View style={styles.provisionFormHeaderText}>
+              <Text style={[styles.provisionFormTitle, { color: isDark ? '#fff' : '#333' }]}> 
+                {useBlePairing ? 'Bluetooth Pairing' : 'WiFi Setup'}
+              </Text>
+              <Text style={[styles.provisionFormSubtext, { color: isDark ? '#888' : '#666' }]}> 
+                {useBlePairing
+                  ? `Smartera-Remote will discover ${serialNumber.trim()} and send credentials`
+                  : `Send WiFi credentials to ${serialNumber.trim()}`}
+              </Text>
+            </View>
+          </View>
+
+          {useBlePairing && (
+            <View style={styles.bleInfoBanner}>
+              <Ionicons name="flash" size={16} color="#0F766E" />
+              <Text style={styles.bleInfoText}>
+                Fast pairing: the app finds the plug over BLE and provisions WiFi in one step.
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.inputContainer}>
+            <Text style={[styles.inputLabel, { color: isDark ? '#aaa' : '#666' }]}>
+              WiFi Network Name (SSID)
+            </Text>
+            <View style={[styles.inputWrapper, { backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5' }]}>
+              <Ionicons name="wifi-outline" size={20} color={isDark ? '#888' : '#666'} />
+              <TextInput
+                style={[styles.textInput, { color: isDark ? '#fff' : '#333' }]}
+                placeholder="Your WiFi network name"
+                placeholderTextColor={isDark ? '#555' : '#999'}
+                value={provisionSsid}
+                onChangeText={setProvisionSsid}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {autoSsid && autoSsid === provisionSsid && (
+                <View style={styles.autoSsidBadge}>
+                  <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+                  <Text style={styles.autoSsidBadgeText}>Auto-detected</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={[styles.inputLabel, { color: isDark ? '#aaa' : '#666' }]}>
+              WiFi Password
+            </Text>
+            <View style={[styles.inputWrapper, { backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5' }]}>
+              <Ionicons name="lock-closed-outline" size={20} color={isDark ? '#888' : '#666'} />
+              <TextInput
+                style={[styles.textInput, { color: isDark ? '#fff' : '#333' }]}
+                placeholder="Your WiFi password"
+                placeholderTextColor={isDark ? '#555' : '#999'}
+                value={provisionPassword}
+                onChangeText={setProvisionPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+          </View>
+
+          {(provisionError || bleError) && (
+            <View style={styles.provisionError}>
+              <Ionicons name="alert-circle" size={16} color={Colors.error} />
+              <Text style={styles.provisionErrorText}>{provisionError || bleError}</Text>
+            </View>
+          )}
+
+          {!!bleProgressMessage && (
+            <View style={styles.provisionProgress}>
+              <ActivityIndicator size="small" color={Colors.primary} />
+              <Text style={styles.provisionProgressText}>{bleProgressMessage}</Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[
+              styles.provisionSubmitButton,
+              {
+                backgroundColor: (provisionSsid.trim() && provisionPassword.trim()) ? Colors.success : '#888',
+                opacity: (provisionSending || bleScanning || bleProvisioning) ? 0.7 : 1,
+              },
+            ]}
+            onPress={handleProvisionWifi}
+            disabled={!provisionSsid.trim() || !provisionPassword.trim() || provisionSending || bleScanning || bleProvisioning}
+          >
+            {(provisionSending || bleScanning || bleProvisioning) ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Ionicons name="send" size={18} color="#fff" />
+                <Text style={styles.provisionSubmitButtonText}>
+                  {useBlePairing ? 'Start Bluetooth Pairing' : 'Send WiFi Credentials'}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <Text style={[styles.provisionHint, { color: isDark ? '#555' : '#999' }]}> 
+            {useBlePairing
+              ? 'Keep the plug near your phone and in pairing mode (LED blinking quickly).'
+              : 'Make sure the device is powered on and in setup mode'}
+          </Text>
+        </View>
+      )}
+
       {/* Visual pattern decoration */}
-      <View style={styles.patternContainer}>
-        <LinearGradient
-          colors={DEVICE_TYPES.find(t => t.type === selectedType)?.gradient || ['#4CAF50', '#2E7D32']}
-          style={styles.patternBox}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <MaterialCommunityIcons
-            name={DEVICE_TYPES.find(t => t.type === selectedType)?.icon || 'power-socket-eu'}
-            size={60}
-            color="rgba(255,255,255,0.3)"
-          />
-        </LinearGradient>
-      </View>
+      {!showProvisionForm && !scanningQR && (
+        <View style={styles.patternContainer}>
+          <LinearGradient
+            colors={DEVICE_TYPES.find(t => t.type === selectedType)?.gradient || ['#4CAF50', '#2E7D32']}
+            style={styles.patternBox}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <MaterialCommunityIcons
+              name={DEVICE_TYPES.find(t => t.type === selectedType)?.icon || 'power-socket-eu'}
+              size={60}
+              color="rgba(255,255,255,0.3)"
+            />
+          </LinearGradient>
+        </View>
+      )}
     </View>
   );
 
@@ -822,6 +1137,19 @@ const AddDeviceModal = ({
               )}
             </TouchableOpacity>
           </View>
+
+          {Platform.OS !== 'web' && (
+            <Modal
+              visible={scanningQR}
+              animationType="slide"
+              onRequestClose={() => setScanningQR(false)}
+            >
+              <QRScan
+                onScanned={handleBarCodeScanned}
+                onCancel={() => setScanningQR(false)}
+              />
+            </Modal>
+          )}
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -835,23 +1163,42 @@ const DeviceDetailsModal = ({
   onClose,
   onDelete,
   onControl,
+  onUpdate,
+  rooms,
 }: {
   device: ServiceDevice | null;
   visible: boolean;
   onClose: () => void;
   onDelete: (id: number) => void;
   onControl: (id: number, action: 'turnOn' | 'turnOff') => void;
+  onUpdate: (id: number, data: { name: string; roomId: number | null }) => Promise<void>;
+  rooms: Room[];
 }) => {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const [controlling, setControlling] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editRoomId, setEditRoomId] = useState<number | null>(null);
+  const [remoteId, setRemoteId] = useState('wireless-switch-1');
   const lastControlTime = useRef(0);
+  const {
+    isSupported: bleSupported,
+    gatewayStatus,
+    isSendingRemoteAction,
+    isRefreshingStatus,
+    sendRemoteAction,
+    refreshGatewayStatus,
+    error: bleError,
+    clearError: clearBleError,
+  } = useBleProvisioning();
 
-  if (!device) return null;
-
-  const deviceTypeInfo = DEVICE_TYPES.find(t => t.type === device.type) || DEVICE_TYPES[0];
+  const isSmartPlug = device?.type === 'SMART_PLUG';
+  const deviceTypeInfo = DEVICE_TYPES.find(t => t.type === device?.type) || DEVICE_TYPES[0];
 
   const handlePowerToggle = async () => {
+    if (!device) return;
+
     // Debounce - prevent rapid taps (must wait 1 second between taps)
     const now = Date.now();
     if (now - lastControlTime.current < 1000) {
@@ -870,6 +1217,74 @@ const DeviceDetailsModal = ({
       setTimeout(() => setControlling(false), 500);
     }
   };
+
+  useEffect(() => {
+    if (!visible || !bleSupported || !isSmartPlug || !device?.serialNumber) {
+      return;
+    }
+
+    refreshGatewayStatus(device.serialNumber);
+  }, [visible, bleSupported, isSmartPlug, device?.serialNumber, refreshGatewayStatus]);
+
+  useEffect(() => {
+    if (!visible || !device) return;
+    setEditName(device.name || '');
+    setEditRoomId(device.roomId ?? null);
+  }, [visible, device?.id, device?.name, device?.roomId]);
+
+  const handleSmarteraRemoteAction = async (
+    action: 'pair' | 'unpair' | 'relay_toggle' | 'gateway_enable' | 'gateway_disable'
+  ) => {
+    if (!device) return;
+
+    if (!bleSupported) {
+      Alert.alert(
+        'Bluetooth Not Available',
+        'Smartera-Remote requires a native build with BLE support (react-native-ble-plx).'
+      );
+      return;
+    }
+
+    clearBleError();
+
+    try {
+      await sendRemoteAction({
+        serialNumber: device.serialNumber,
+        action,
+        remoteId: remoteId.trim() || 'wireless-switch-1',
+      });
+
+      await refreshGatewayStatus(device.serialNumber);
+    } catch {}
+  };
+
+  const handleSaveEdit = async () => {
+    if (!device) return;
+
+    const trimmedName = editName.trim();
+    if (!trimmedName) {
+      Alert.alert('Invalid name', 'Device name cannot be empty.');
+      return;
+    }
+
+    const nameUnchanged = trimmedName === (device.name || '').trim();
+    const roomUnchanged = (editRoomId ?? null) === (device.roomId ?? null);
+    if (nameUnchanged && roomUnchanged) {
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      await onUpdate(device.id, { name: trimmedName, roomId: editRoomId ?? null });
+      Alert.alert('Saved', 'Device details updated successfully.');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to update device details');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  if (!device) return null;
 
   return (
     <Modal
@@ -946,6 +1361,113 @@ const DeviceDetailsModal = ({
               </View>
             </View>
 
+            {device.type === 'SMART_PLUG' && (
+              <View style={styles.detailsSection}>
+                <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#333' }]}>Smartera-Remote</Text>
+                <Text style={[styles.remoteSubtitle, { color: isDark ? '#888' : '#666' }]}>Local BLE gateway for wireless switch control without WiFi or internet.</Text>
+
+                {!bleSupported ? (
+                  <View style={[styles.remoteInfoCard, { backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5' }]}>
+                    <Ionicons name="bluetooth-outline" size={18} color={Colors.warning} />
+                    <Text style={[styles.remoteInfoText, { color: isDark ? '#ddd' : '#333' }]}>Bluetooth module is unavailable in this build. Use a native dev build to enable Smartera-Remote.</Text>
+                  </View>
+                ) : (
+                  <>
+                    <View style={[styles.remoteStatusCard, { backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5' }]}>
+                      <View style={styles.remoteStatusRow}>
+                        <Text style={[styles.remoteStatusLabel, { color: isDark ? '#aaa' : '#666' }]}>Gateway</Text>
+                        <Text style={[styles.remoteStatusValue, { color: gatewayStatus?.gatewayEnabled ? Colors.success : Colors.error }]}> 
+                          {gatewayStatus?.gatewayEnabled ? 'Enabled' : 'Disabled'}
+                        </Text>
+                      </View>
+                      <View style={styles.remoteStatusRow}>
+                        <Text style={[styles.remoteStatusLabel, { color: isDark ? '#aaa' : '#666' }]}>Paired Remotes</Text>
+                        <Text style={[styles.remoteStatusValue, { color: isDark ? '#fff' : '#333' }]}> 
+                          {gatewayStatus?.pairedRemotes ?? 0}
+                        </Text>
+                      </View>
+                      <View style={styles.remoteStatusRow}>
+                        <Text style={[styles.remoteStatusLabel, { color: isDark ? '#aaa' : '#666' }]}>Transport</Text>
+                        <Text style={[styles.remoteStatusValue, { color: isDark ? '#fff' : '#333' }]}> 
+                          {gatewayStatus?.transport || 'smartera-Remote'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.remoteInputRow, { backgroundColor: isDark ? '#2a2a2a' : '#f8f8f8' }]}>
+                      <Ionicons name="hardware-chip-outline" size={18} color={isDark ? '#aaa' : '#666'} />
+                      <TextInput
+                        value={remoteId}
+                        onChangeText={setRemoteId}
+                        style={[styles.remoteInput, { color: isDark ? '#fff' : '#333' }]}
+                        placeholder="wireless-switch-1"
+                        placeholderTextColor={isDark ? '#666' : '#999'}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                    </View>
+
+                    <View style={styles.remoteActionGrid}>
+                      <TouchableOpacity
+                        style={[styles.remoteActionButton, { backgroundColor: '#0F766E' }]}
+                        onPress={() => handleSmarteraRemoteAction('pair')}
+                        disabled={isSendingRemoteAction}
+                      >
+                        <Text style={styles.remoteActionText}>Pair Switch</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.remoteActionButton, { backgroundColor: '#475569' }]}
+                        onPress={() => handleSmarteraRemoteAction('unpair')}
+                        disabled={isSendingRemoteAction}
+                      >
+                        <Text style={styles.remoteActionText}>Unpair Switch</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.remoteActionButton, { backgroundColor: Colors.primary }]}
+                        onPress={() => handleSmarteraRemoteAction('relay_toggle')}
+                        disabled={isSendingRemoteAction}
+                      >
+                        <Text style={styles.remoteActionText}>Local Toggle</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.remoteActionButton, { backgroundColor: gatewayStatus?.gatewayEnabled ? Colors.error : Colors.success }]}
+                        onPress={() =>
+                          handleSmarteraRemoteAction(gatewayStatus?.gatewayEnabled ? 'gateway_disable' : 'gateway_enable')
+                        }
+                        disabled={isSendingRemoteAction}
+                      >
+                        <Text style={styles.remoteActionText}>
+                          {gatewayStatus?.gatewayEnabled ? 'Disable Gateway' : 'Enable Gateway'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.remoteRefreshButton, { borderColor: isDark ? '#555' : '#ccc' }]}
+                      onPress={() => refreshGatewayStatus(device.serialNumber)}
+                      disabled={isRefreshingStatus}
+                    >
+                      {isRefreshingStatus ? (
+                        <ActivityIndicator size="small" color={Colors.primary} />
+                      ) : (
+                        <>
+                          <Ionicons name="refresh" size={16} color={Colors.primary} />
+                          <Text style={styles.remoteRefreshText}>Refresh Gateway Status</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+
+                    {!!bleError && (
+                      <View style={styles.remoteErrorCard}>
+                        <Ionicons name="alert-circle" size={14} color={Colors.error} />
+                        <Text style={styles.remoteErrorText}>{bleError}</Text>
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+            )}
+
             {/* Telemetry Data */}
             {device.type === 'SMART_PLUG' && device.lastTelemetry && (
               <View style={styles.detailsSection}>
@@ -1006,6 +1528,84 @@ const DeviceDetailsModal = ({
               </View>
             </View>
 
+            {/* Edit Device */}
+            <View style={styles.detailsSection}>
+              <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#333' }]}>Edit Device</Text>
+              <View style={[styles.editCard, { backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5' }]}> 
+                <View style={[styles.editNameRow, { backgroundColor: isDark ? '#1f1f1f' : '#fff' }]}> 
+                  <Ionicons name="create-outline" size={18} color={isDark ? '#aaa' : '#666'} />
+                  <TextInput
+                    style={[styles.editNameInput, { color: isDark ? '#fff' : '#333' }]}
+                    value={editName}
+                    onChangeText={setEditName}
+                    placeholder="Device name"
+                    placeholderTextColor={isDark ? '#666' : '#999'}
+                    autoCorrect={false}
+                  />
+                </View>
+
+                <Text style={[styles.editRoomLabel, { color: isDark ? '#aaa' : '#666' }]}>Room</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.editRoomChips}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.editRoomChip,
+                      {
+                        backgroundColor: editRoomId === null ? Colors.primary : (isDark ? '#1f1f1f' : '#fff'),
+                      },
+                    ]}
+                    onPress={() => setEditRoomId(null)}
+                  >
+                    <Text style={[styles.editRoomChipText, { color: editRoomId === null ? '#fff' : (isDark ? '#ddd' : '#333') }]}>No Room</Text>
+                  </TouchableOpacity>
+
+                  {rooms.map((room) => {
+                    const selected = editRoomId === room.roomId;
+                    return (
+                      <TouchableOpacity
+                        key={room.roomId}
+                        style={[
+                          styles.editRoomChip,
+                          {
+                            backgroundColor: selected ? Colors.primary : (isDark ? '#1f1f1f' : '#fff'),
+                          },
+                        ]}
+                        onPress={() => setEditRoomId(room.roomId)}
+                      >
+                        <Text style={[styles.editRoomChipText, { color: selected ? '#fff' : (isDark ? '#ddd' : '#333') }]}>
+                          {room.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                <TouchableOpacity
+                  style={[
+                    styles.editSaveButton,
+                    {
+                      backgroundColor: editName.trim() ? Colors.primary : '#888',
+                      opacity: savingEdit ? 0.7 : 1,
+                    },
+                  ]}
+                  onPress={handleSaveEdit}
+                  disabled={!editName.trim() || savingEdit}
+                >
+                  {savingEdit ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="save-outline" size={18} color="#fff" />
+                      <Text style={styles.editSaveButtonText}>Save Changes</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+
             {/* Danger Zone */}
             <View style={styles.detailsSection}>
               <Text style={[styles.sectionTitle, { color: Colors.error }]}>Danger Zone</Text>
@@ -1053,6 +1653,7 @@ export default function DeviceActive() {
     controlDevice,
     addDevice,
     removeDevice,
+    updateDevice,
   } = useDevices();
   const { rooms, createRoom, creating: creatingRoom } = useRooms();
 
@@ -1084,8 +1685,14 @@ export default function DeviceActive() {
       setAddModalVisible(false);
       Alert.alert('Success', `${data.name} has been added successfully!`);
     } catch (err: any) {
-      console.error('Failed to add device:', err);
-      Alert.alert('Error', err.message || 'Failed to add device');
+      if (err instanceof ApiError && err.status === 409) {
+        Alert.alert(
+          'Device already exists',
+          'This serial number is already registered. Long-press the existing device to edit its name or room.'
+        );
+      } else {
+        Alert.alert('Error', err.message || 'Failed to add device');
+      }
     } finally {
       setAddingDevice(false);
     }
@@ -1107,6 +1714,21 @@ export default function DeviceActive() {
     } catch (err: any) {
       console.error('Failed to delete device:', err);
       Alert.alert('Error', err.message || 'Failed to delete device');
+    }
+  };
+
+  const handleUpdateDevice = async (deviceId: number, data: { name: string; roomId: number | null }) => {
+    try {
+      const updated = await updateDevice(deviceId, data);
+      if (updated) {
+        setSelectedDevice(prev => {
+          if (!prev) return prev;
+          if (prev.id !== deviceId) return prev;
+          return { ...prev, ...updated };
+        });
+      }
+    } catch (err: any) {
+      throw err;
     }
   };
 
@@ -1264,6 +1886,8 @@ export default function DeviceActive() {
         onClose={() => setSelectedDevice(null)}
         onDelete={handleDelete}
         onControl={handleControl}
+        onUpdate={handleUpdateDevice}
+        rooms={rooms}
       />
     </View>
   );
@@ -1489,7 +2113,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 90,
     right: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -1514,7 +2138,8 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   modalContent: {
-    maxHeight: height * 0.9,
+    height: Math.min(height * 0.9, 760),
+    minHeight: Math.min(height * 0.72, 620),
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     overflow: 'hidden',
@@ -1945,5 +2570,282 @@ const styles = StyleSheet.create({
     color: Colors.error,
     fontSize: 16,
     fontWeight: '600',
+  },
+  editCard: {
+    borderRadius: 14,
+    padding: 12,
+  },
+  editNameRow: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  editNameInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  editRoomLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  editRoomChips: {
+    gap: 8,
+    paddingBottom: 2,
+    marginBottom: 12,
+  },
+  editRoomChip: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  editRoomChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  editSaveButton: {
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  editSaveButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  remoteSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  remoteInfoCard: {
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  remoteInfoText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  remoteStatusCard: {
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+    marginBottom: 10,
+  },
+  remoteStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  remoteStatusLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  remoteStatusValue: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  remoteInputRow: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  remoteInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  remoteActionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  remoteActionButton: {
+    flex: 1,
+    minWidth: 130,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  remoteActionText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  remoteRefreshButton: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  remoteRefreshText: {
+    color: Colors.primary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  remoteErrorCard: {
+    marginTop: 10,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 10,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  remoteErrorText: {
+    color: Colors.error,
+    fontSize: 12,
+    flex: 1,
+  },
+  wifiProvisionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    marginTop: 16,
+    gap: 12,
+  },
+  wifiProvisionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  wifiProvisionButtonSubtext: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  wifiProvisionButtonTextContainer: {
+    flex: 1,
+  },
+  qrButton: {
+    padding: 8,
+    marginRight: 4,
+  },
+  autoSsidBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingRight: 8,
+  },
+  autoSsidBadgeText: {
+    color: Colors.success,
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  provisionForm: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 16,
+  },
+provisionFormHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    marginBottom: 16,
+  },
+  provisionFormHeaderText: {
+    flex: 1,
+  },
+  provisionFormTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  provisionFormSubtext: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  provisionSubmitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 16,
+    marginTop: 8,
+    gap: 8,
+  },
+  provisionSubmitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  provisionError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    marginBottom: 12,
+  },
+  provisionErrorText: {
+    color: Colors.error,
+    fontSize: 14,
+    flex: 1,
+  },
+  provisionHint: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  bleInfoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(15, 118, 110, 0.12)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 14,
+  },
+  bleInfoText: {
+    flex: 1,
+    color: '#0F766E',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  provisionProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  provisionProgressText: {
+    color: Colors.primary,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginLeft: 4,
   },
 });

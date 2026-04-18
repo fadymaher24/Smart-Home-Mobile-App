@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { apiRequest } from '../../utils/api';
+import { useAuth } from '../../context/AuthContext';
 
 export default function WebProvisioningForm() {
   const { t } = useTranslation();
+  const { token } = useAuth();
   const [serialNumber, setSerialNumber] = useState('');
   const [ssid, setSSID] = useState('');
   const [password, setPassword] = useState('');
@@ -22,6 +24,11 @@ export default function WebProvisioningForm() {
       return;
     }
 
+    if (!token) {
+      setError('You must be logged in to provision a device');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -30,7 +37,7 @@ export default function WebProvisioningForm() {
         deviceSerialNumber: serialNumber.trim(),
         ssid: ssid.trim(),
         password: password.trim(),
-      });
+      }, token);
 
       Alert.alert(
         t('provisioning.success.title', 'Credentials Stored'),

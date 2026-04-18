@@ -144,6 +144,16 @@ export const deviceService = {
     return apiRequest(`/device/${deviceId}`, 'DELETE', undefined, token);
   },
 
+  // Update device metadata (PUT /api/device/:id)
+  async updateDevice(
+    deviceId: string | number,
+    data: { name?: string; roomId?: number | null },
+    token: string
+  ): Promise<Device> {
+    const response = await apiRequest(`/device/${deviceId}`, 'PUT', data, token);
+    return response.device || response;
+  },
+
   // Get total power usage statistics (GET /api/power-usage/total)
   async getPowerUsage(token: string): Promise<PowerUsageStats> {
     return apiRequest('/power-usage/total', 'GET', undefined, token);

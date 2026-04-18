@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useProvisioningContext } from '../../context/ProvisioningContext';
-import { router } from 'expo-router';
 
 export default function SuccessScreen() {
   const { t } = useTranslation();
@@ -10,12 +9,10 @@ export default function SuccessScreen() {
 
   const handleViewDevice = () => {
     reset();
-    router.replace('/(tabs)/devices' as any);
   };
 
   const handleAddAnother = () => {
     reset();
-    router.replace('/provisioning/scan' as any);
   };
 
   return (
@@ -24,8 +21,8 @@ export default function SuccessScreen() {
         <Text style={styles.icon}>✅</Text>
       </View>
 
-      <Text style={styles.title}>{t('provisioning.success.title')}</Text>
-      <Text style={styles.subtitle}>{t('provisioning.success.subtitle')}</Text>
+      <Text style={styles.title}>{t('provisioning.success.title', 'Device Connected!')}</Text>
+      <Text style={styles.subtitle}>{t('provisioning.success.subtitle', 'Your device has been successfully set up and is now connected to your network.')}</Text>
 
       {state.device && (
         <View style={styles.deviceCard}>
@@ -45,11 +42,11 @@ export default function SuccessScreen() {
       )}
 
       <TouchableOpacity style={styles.primaryButton} onPress={handleViewDevice}>
-        <Text style={styles.primaryButtonText}>{t('provisioning.success.viewDevice')}</Text>
+        <Text style={styles.primaryButtonText}>{t('provisioning.success.viewDevice', 'View Devices')}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.secondaryButton} onPress={handleAddAnother}>
-        <Text style={styles.secondaryButtonText}>{t('provisioning.success.addAnother')}</Text>
+        <Text style={styles.secondaryButtonText}>{t('provisioning.success.addAnother', 'Add Another Device')}</Text>
       </TouchableOpacity>
 
       <View style={styles.estimatedTime}>

@@ -2,8 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useProvisioningContext, ProvisioningPhase, DiscoveredDevice } from '../context/ProvisioningContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+import { API_BASE_URL } from '../utils/api';
 
 interface UseProvisioningReturn {
   state: {
@@ -140,7 +139,7 @@ export function useProvisioning(): UseProvisioningReturn {
   };
 
   const getAuthToken = async (): Promise<string> => {
-    const token = await AsyncStorage.getItem('auth_token');
+    const token = await AsyncStorage.getItem('token');
     return token || '';
   };
 

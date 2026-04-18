@@ -1,0 +1,8 @@
+AGENTS.md
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/
+*.log

@@ -35,11 +35,9 @@ const LoginScreen = () => {
       } else {
         await register(name, email, password);
       }
-      // If we get here, login/register was successful
-      // The AuthContext will automatically redirect to the main app
-    } catch (error) {
-      console.error("Auth failed:", error);
-      Alert.alert("Error", isLogin ? "Login failed" : "Registration failed");
+    } catch (error: any) {
+      const message = error?.message || (isLogin ? "Login failed" : "Registration failed");
+      Alert.alert(isLogin ? "Login Failed" : "Registration Failed", message);
     } finally {
       setLoading(false);
     }

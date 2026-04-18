@@ -1,12 +1,9 @@
-// import { NavigationContainer } from "@react-navigation/native";
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-
-import "react-native-gesture-handler";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import Feather from "@expo/vector-icons/Feather";
-import { View, StyleSheet, Text } from "react-native";
+import { View, StyleSheet, Text, Platform, PermissionsAndroid, Alert } from "react-native";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 
@@ -164,6 +161,61 @@ const styles = StyleSheet.create({
 // Main app component with authentication wrapper
 function MainApp() {
   const { token, isLoading } = useAuth();
+
+  React.useEffect(() => {
+    const requestStartupPermissions = async () => {
+      if (Platform.OS !== "android") {
+        return;
+      }
+
+      const sdkVersion = Number(Platform.Version || 0);
+      const requiredPermissions: string[] = [
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      ];
+
+      if (sdkVersion >= 31) {
+        requiredPermissions.push(
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT
+        );
+      }
+
+      if (sdkVersion >= 33) {
+        requiredPermissions.push(
+          PermissionsAndroid.PERMISSIONS.NEARBY_WIFI_DEVICES
+        );
+      }
+
+      const missingPermissions: string[] = [];
+      for (const permission of requiredPermissions) {
+        const granted = await PermissionsAndroid.check(permission as any);
+        if (!granted) {
+          missingPermissions.push(permission);
+        }
+      }
+
+      if (missingPermissions.length === 0) {
+        return;
+      }
+
+      const requestResult = (await PermissionsAndroid.requestMultiple(
+        missingPermissions as any
+      )) as Record<string, string>;
+
+      const deniedPermissions = missingPermissions.filter(
+        permission => requestResult[permission] !== PermissionsAndroid.RESULTS.GRANTED
+      );
+
+      if (deniedPermissions.length > 0) {
+        Alert.alert(
+          "Permissions Required",
+          "Bluetooth and location permissions are required to discover and pair Smartera devices. You can enable them later in Android app settings.",
+        );
+      }
+    };
+
+    requestStartupPermissions();
+  }, []);
 
   if (isLoading) {
     return (

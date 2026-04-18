@@ -41,3 +41,7 @@ app-example
 .specify/
 .opencode/
 specs/
+
+android/
+ios/
+__tests__

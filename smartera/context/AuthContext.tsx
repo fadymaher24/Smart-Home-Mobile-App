@@ -1,6 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_BASE_URL } from '../utils/api';
+import { API_BASE_URL, ApiError } from '../utils/api';
+
+function parseErrorMessage(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed.message || parsed.error || parsed.msg || raw;
+  } catch {
+    return raw;
+  }
+}
 
 interface AuthContextType {
   token: string | null;
@@ -32,39 +41,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     loadStoredAuth();
   }, []);
 
+  const fetchUserProfile = async (authToken: string): Promise<any> => {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      headers: {
+        "Authorization": `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+    if (response.ok) {
+      const data = await response.json();
+      return data.user || null;
+    }
+    if (response.status === 401 || response.status === 403) {
+      return null;
+    }
+    throw new Error(`Server error: ${response.status}`);
+  };
+
   const loadStoredAuth = async () => {
     try {
       const storedToken = await AsyncStorage.getItem("token");
       const storedUser = await AsyncStorage.getItem("user");
-      
+
       if (storedToken) {
-        // Verify the token is still valid with the backend
         try {
-          const response = await fetch(`${API_BASE_URL}/auth/me`, {
-            headers: { 
-              "Authorization": `Bearer ${storedToken}`,
-              "Content-Type": "application/json"
-            },
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
+          const userProfile = await fetchUserProfile(storedToken);
+          if (userProfile) {
             setToken(storedToken);
-            setUser(data.user || (storedUser ? JSON.parse(storedUser) : null));
-            console.log("Token verified successfully");
+            setUser(userProfile);
+            await AsyncStorage.setItem("user", JSON.stringify(userProfile));
           } else {
-            // Token is invalid, clear it
-            console.log("Stored token is invalid, clearing...");
             await AsyncStorage.removeItem("token");
             await AsyncStorage.removeItem("user");
           }
-        } catch (error) {
-          console.log("Could not verify token with backend:", error);
-          // Keep token for offline use, but warn
+        } catch {
+          const cachedUser = storedUser ? JSON.parse(storedUser) : null;
           setToken(storedToken);
-          if (storedUser) {
-            setUser(JSON.parse(storedUser));
-          }
+          setUser(cachedUser);
         }
       }
     } catch (error) {
@@ -74,10 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const login = async (email: string, password: string): Promise<void> => {
-    console.log("Login attempt for:", email);
-    console.log("API URL:", `${API_BASE_URL}/auth/login`);
-    
+const login = async (email: string, password: string): Promise<void> => {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
@@ -85,27 +95,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         body: JSON.stringify({ email, password }),
       });
 
-      console.log("Login response status:", response.status);
-
       if (response.ok) {
         const data = await response.json();
-        console.log("Login successful, received token");
-        
         setToken(data.token);
-        setUser(data.user);
         await AsyncStorage.setItem("token", data.token);
-        if (data.user) {
-          await AsyncStorage.setItem("user", JSON.stringify(data.user));
+
+        let userProfile = data.user || null;
+        if (!userProfile && data.token) {
+          try {
+            userProfile = await fetchUserProfile(data.token);
+          } catch {}
         }
-        return; // Success
+
+        if (userProfile) {
+          setUser(userProfile);
+          await AsyncStorage.setItem("user", JSON.stringify(userProfile));
+        } else {
+          const cachedUser = await AsyncStorage.getItem("user");
+          setUser(cachedUser ? JSON.parse(cachedUser) : null);
+        }
+        return;
       }
 
-      const errorData = await response.text();
-      console.log("Login error response:", errorData);
-      throw new Error(errorData || "Login failed");
+      const errorText = await response.text();
+      const message = parseErrorMessage(errorText);
+
+      if (response.status === 401) {
+        throw new Error("Invalid email or password");
+      }
+      throw new Error(message || "Login failed");
     } catch (error: any) {
-      console.log("Login failed:", error.message);
-      throw error; // Re-throw to be handled by LoginScreen
+      if (error instanceof TypeError && error.message === 'Network request failed') {
+        throw new Error("Unable to connect to server. Check your network connection.");
+      }
+      throw error;
     }
   };
 
@@ -114,8 +137,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     email: string,
     password: string
   ): Promise<void> => {
-    console.log("Register attempt for:", email);
-    
     try {
       const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: "POST",
@@ -128,26 +149,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         }),
       });
 
-      console.log("Register response status:", response.status);
-
       if (response.ok) {
-        console.log("Registration successful, auto-logging in...");
-        // Auto-login after registration
         await login(email, password);
         return;
       }
 
-      const errorData = await response.text();
-      console.log("Register error response:", errorData);
-      throw new Error(errorData || "Registration failed");
+      const errorText = await response.text();
+      const message = parseErrorMessage(errorText);
+      throw new Error(message || "Registration failed");
     } catch (error: any) {
-      console.log("Registration failed:", error.message);
+      if (error instanceof TypeError && error.message === 'Network request failed') {
+        throw new Error("Unable to connect to server. Check your network connection.");
+      }
       throw error;
     }
   };
 
   const logout = async () => {
-    console.log("Logging out...");
     setToken(null);
     setUser(null);
     await AsyncStorage.removeItem("token");

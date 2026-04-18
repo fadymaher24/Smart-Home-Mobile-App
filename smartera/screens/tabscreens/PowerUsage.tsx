@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -188,11 +188,20 @@ export default function PowerUsage() {
   
   // Real data hooks
   const { devices, loading: devicesLoading, refresh: refreshDevices } = useDevices();
-  const { stats: powerStats, loading: powerLoading, refresh: refreshPower } = usePowerUsage();
+  const { stats: powerStats, weeklyData, dailyData, monthlyData, loading: powerLoading, refresh: refreshPower, loadDailyData, loadMonthlyData } = usePowerUsage();
   const { isConnected: wsConnected } = useRealtimeConnection();
   
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('week');
+
+  // Fetch period-specific data when tab changes
+  useEffect(() => {
+    if (selectedPeriod === 'day') {
+      loadDailyData();
+    } else if (selectedPeriod === 'month') {
+      loadMonthlyData();
+    }
+  }, [selectedPeriod, loadDailyData, loadMonthlyData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -266,31 +275,72 @@ export default function PowerUsage() {
     };
   }, [powerStats, currentPower]);
 
-  // Generate chart data based on selected period
+  // Generate chart data from real backend data
   const chartData = useMemo(() => {
-    const days = selectedPeriod === 'day' ? ['6am', '9am', '12pm', '3pm', '6pm', '9pm', '12am'] 
-               : selectedPeriod === 'week' ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-               : ['W1', 'W2', 'W3', 'W4'];
-    
-    // Simulate data based on current readings (in real app, get history from backend)
-    const baseValue = energyStats.dailyAverage;
-    
-    const data = days.map((_, index) => {
-      const randomFactor = 0.7 + Math.random() * 0.6;
-      return Math.max(0.1, baseValue * randomFactor);
-    });
+    if (selectedPeriod === 'day' && dailyData?.hourlyData) {
+      const points = dailyData.hourlyData;
+      const formatHour = (h: number) => {
+        if (h === 0) return '12am';
+        if (h === 12) return '12pm';
+        return h < 12 ? `${h}am` : `${h - 12}pm`;
+      };
+      const labels = points.map(p => formatHour(p.hour));
+      const data = points.map(p => Math.max(0, p.avgPower / 1000));
+      return {
+        labels,
+        datasets: [
+          {
+            data: data.length > 0 ? data : [0],
+            color: (opacity = 1) => withAlpha(Colors.primary, opacity),
+            strokeWidth: 2,
+          },
+        ],
+      };
+    }
 
+    if (selectedPeriod === 'week' && weeklyData.data.length > 0) {
+      const hasData = weeklyData.data.some(v => v > 0);
+      return {
+        labels: weeklyData.labels,
+        datasets: [
+          {
+            data: hasData ? weeklyData.data : [0],
+            color: (opacity = 1) => withAlpha(Colors.primary, opacity),
+            strokeWidth: 2,
+          },
+        ],
+      };
+    }
+
+    if (selectedPeriod === 'month' && monthlyData.data.length > 0) {
+      const hasData = monthlyData.data.some(v => v > 0);
+      return {
+        labels: monthlyData.labels,
+        datasets: [
+          {
+            data: hasData ? monthlyData.data : [0],
+            color: (opacity = 1) => withAlpha(Colors.primary, opacity),
+            strokeWidth: 2,
+          },
+        ],
+      };
+    }
+
+    // Fallback with empty data
+    const fallbackLabels = selectedPeriod === 'day'
+      ? ['6am', '9am', '12pm', '3pm', '6pm', '9pm']
+      : selectedPeriod === 'week'
+        ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        : ['W1', 'W2', 'W3', 'W4'];
     return {
-      labels: days,
-      datasets: [
-        {
-          data,
-          color: (opacity = 1) => withAlpha(Colors.primary, opacity),
-          strokeWidth: 2,
-        },
-      ],
+      labels: fallbackLabels,
+      datasets: [{
+        data: [0],
+        color: (opacity = 1) => withAlpha(Colors.primary, opacity),
+        strokeWidth: 2,
+      }],
     };
-  }, [selectedPeriod, energyStats.dailyAverage]);
+  }, [selectedPeriod, dailyData, weeklyData, monthlyData]);
 
   const chartConfig = {
     backgroundColor: themeColors.surface,
@@ -424,10 +474,27 @@ export default function PowerUsage() {
             </View>
           </View>
           
-          {loading && devices.length === 0 ? (
+{loading && devices.length === 0 ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={Colors.primary} />
             </View>
+          ) : selectedPeriod === 'day' ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollChartContainer}>
+              <LineChart
+                data={chartData}
+                width={Math.max(width - 64, chartData.labels.length * 50)}
+                height={200}
+                chartConfig={chartConfig}
+                bezier
+                style={styles.chart}
+                withInnerLines={true}
+                withOuterLines={false}
+                withVerticalLines={true}
+                withHorizontalLines={true}
+                withDots={true}
+                withShadow={false}
+              />
+            </ScrollView>
           ) : (
             <View style={styles.chartContainer}>
               <LineChart
@@ -693,6 +760,9 @@ const styles = StyleSheet.create({
   },
   chartContainer: {
     alignItems: 'center',
+  },
+  scrollChartContainer: {
+    paddingVertical: 8,
   },
   chart: {
     borderRadius: 16,

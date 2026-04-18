@@ -192,6 +192,26 @@ export function useDevices() {
     }
   }, [token]);
 
+  const updateDevice = useCallback(
+    async (deviceId: string | number, data: { name?: string; roomId?: number | null }) => {
+      if (!token) return;
+
+      try {
+        const updatedDevice = await deviceService.updateDevice(deviceId, data, token);
+        setDevices(prev => prev.map(d =>
+          (d.id === deviceId || d.serialNumber === deviceId)
+            ? { ...d, ...updatedDevice }
+            : d
+        ));
+        return updatedDevice;
+      } catch (err: any) {
+        console.error('Failed to update device:', err);
+        throw err;
+      }
+    },
+    [token]
+  );
+
   return {
     devices,
     loading,
@@ -200,6 +220,7 @@ export function useDevices() {
     controlDevice,
     addDevice,
     removeDevice,
+    updateDevice,
   };
 }
 
@@ -358,13 +379,30 @@ export function useDevice(deviceId: string | number) {
   };
 }
 
+export interface DailyPowerData {
+  date: string;
+  hourlyData: { hour: number; label: string; avgPower: number; readings: number }[];
+  peakHour: number;
+  peakPower: number;
+}
+
+export interface ChartDataSet {
+  labels: string[];
+  data: number[];
+}
+
 // Hook for power usage dashboard
 export function usePowerUsage() {
   const { token } = useAuth();
   const [stats, setStats] = useState<PowerUsageStats | null>(null);
-  const [weeklyData, setWeeklyData] = useState<{ labels: string[]; data: number[] }>({
+  const [weeklyData, setWeeklyData] = useState<ChartDataSet>({
     labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
     data: [0, 0, 0, 0, 0, 0, 0],
+  });
+  const [dailyData, setDailyData] = useState<DailyPowerData | null>(null);
+  const [monthlyData, setMonthlyData] = useState<ChartDataSet>({
+    labels: ['W1', 'W2', 'W3', 'W4'],
+    data: [0, 0, 0, 0],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -384,13 +422,44 @@ export function usePowerUsage() {
       setStats(totalStats);
       setWeeklyData({
         labels: weekly.labels || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-        data: weekly.dailyData || [0, 0, 0, 0, 0, 0, 0],
+        data: (weekly.dailyData || [0, 0, 0, 0, 0, 0, 0]).map((v: number) => v / 1000),
       });
     } catch (err: any) {
       console.error('Failed to load power usage:', err);
       setError(err.message || 'Failed to load power usage');
     } finally {
       setLoading(false);
+    }
+  }, [token]);
+
+  const loadDailyData = useCallback(async () => {
+    if (!token) return;
+    try {
+      const daily = await deviceService.getDailyPowerUsage(token);
+      setDailyData(daily);
+    } catch (err: any) {
+      console.error('Failed to load daily power data:', err);
+    }
+  }, [token]);
+
+  const loadMonthlyData = useCallback(async () => {
+    if (!token) return;
+    try {
+      const monthly = await deviceService.getWeeklyPowerUsage(token);
+      const dailyData = monthly.dailyData || [0, 0, 0, 0, 0, 0, 0];
+      const inKwh = dailyData.map((v: number) => v / 1000);
+      const weekLabels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+      const weekData = dailyData.length === 7
+        ? [
+            inKwh.slice(0, 2).reduce((a: number, b: number) => a + b, 0),
+            inKwh.slice(2, 4).reduce((a: number, b: number) => a + b, 0),
+            inKwh.slice(4, 6).reduce((a: number, b: number) => a + b, 0),
+            inKwh[6],
+          ]
+        : [0, 0, 0, 0];
+      setMonthlyData({ labels: weekLabels, data: weekData });
+    } catch (err: any) {
+      console.error('Failed to load monthly power data:', err);
     }
   }, [token]);
 
@@ -405,12 +474,11 @@ export function usePowerUsage() {
 
     realtimeService.connect(token).catch(console.error);
 
-    // Refresh stats when telemetry is received (debounced)
     let refreshTimeout: ReturnType<typeof setTimeout>;
     const unsubscribe = realtimeService.subscribe('telemetry', () => {
       clearTimeout(refreshTimeout);
       refreshTimeout = setTimeout(() => {
-        // Update current power from devices instead of full refresh
+        loadPowerUsage();
       }, 5000);
     });
 
@@ -418,7 +486,7 @@ export function usePowerUsage() {
       unsubscribe();
       clearTimeout(refreshTimeout);
     };
-  }, [token]);
+  }, [token, loadPowerUsage]);
 
   // Periodic refresh (every 60 seconds)
   useEffect(() => {
@@ -431,9 +499,13 @@ export function usePowerUsage() {
   return {
     stats,
     weeklyData,
+    dailyData,
+    monthlyData,
     loading,
     error,
     refresh: loadPowerUsage,
+    loadDailyData,
+    loadMonthlyData,
   };
 }
 

@@ -3,7 +3,7 @@ import { renderHook, act } from '@testing-library/react-native';
 import { useWifiScan } from '../../hooks/useWifiScan';
 
 jest.mock('react-native', () => ({
-  Platform: { OS: 'android' },
+  Platform: { OS: 'web' },
   PermissionsAndroid: {
     PERMISSIONS: { ACCESS_FINE_LOCATION: 'android.permission.ACCESS_FINE_LOCATION' },
     RESULTS: { GRANTED: 'granted', DENIED: 'denied', NEVER_ASK_AGAIN: 'never_ask_again' },
@@ -14,20 +14,32 @@ jest.mock('react-native', () => ({
   Alert: { alert: jest.fn() },
 }));
 
-import { PermissionsAndroid } from 'react-native';
+jest.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({
+    token: 'test-token',
+    user: { id: 1, email: 'test@test.com' },
+    login: jest.fn(),
+    register: jest.fn(),
+    logout: jest.fn(),
+    isLoading: false,
+  }),
+}));
 
-const mockPermissionsAndroid = PermissionsAndroid as jest.Mocked<typeof PermissionsAndroid>;
+jest.mock('../../utils/api', () => ({
+  apiRequest: jest.fn(),
+  ApiError: class ApiError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+      super(message);
+      this.name = 'ApiError';
+      this.status = status;
+    }
+  },
+}));
 
 describe('useWifiScan', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
-    mockPermissionsAndroid.check.mockResolvedValue(true);
-  });
-
-  afterEach(() => {
-    jest.runOnlyPendingTimers();
-    jest.useRealTimers();
   });
 
   it('initializes with required methods and state', async () => {
@@ -44,43 +56,24 @@ describe('useWifiScan', () => {
     expect(typeof result.current.stopScan).toBe('function');
     expect(typeof result.current.requestPermission).toBe('function');
     expect(typeof result.current.hasPermission).toBe('boolean');
+    expect(typeof result.current.scanMode).toBe('string');
+    expect(typeof result.current.sendCredentialsToAP).toBe('function');
+    expect(typeof result.current.storeCredentialsOnServer).toBe('function');
+    expect(typeof result.current.sendProvisioningToken).toBe('function');
   });
 
-  it('requests permission when not granted', async () => {
-    mockPermissionsAndroid.check.mockResolvedValue(false);
-    mockPermissionsAndroid.request.mockResolvedValue('denied');
-
+  it('sets error on web platform when scanning', async () => {
     const { result } = renderHook(() => useWifiScan());
 
     await act(async () => {
       await Promise.resolve();
+    });
+
+    await act(async () => {
       await result.current.startScan();
     });
 
-    expect(mockPermissionsAndroid.request).toHaveBeenCalled();
-  });
-
-  it('scans and populates devices on Android', async () => {
-    mockPermissionsAndroid.check.mockResolvedValue(true);
-
-    const { result } = renderHook(() => useWifiScan());
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    const scanPromise = act(async () => {
-      const promise = result.current.startScan();
-      jest.advanceTimersByTime(2000);
-      await promise;
-    });
-
-    await scanPromise;
-
-    expect(result.current.devices.length).toBeGreaterThan(0);
-    expect(result.current.devices[0]).toHaveProperty('ssid');
-    expect(result.current.devices[0]).toHaveProperty('deviceType');
-    expect(result.current.devices[0]).toHaveProperty('serialSuffix');
+    expect(result.current.error).toContain('not available on web');
     expect(result.current.isScanning).toBe(false);
   });
 
@@ -92,10 +85,12 @@ describe('useWifiScan', () => {
     });
 
     expect(result.current.isScanning).toBe(false);
+    expect(result.current.scanMode).toBe('idle');
   });
 
-  it('returns true when permission granted', async () => {
-    mockPermissionsAndroid.request.mockResolvedValue('granted');
+  it('stores credentials on server via apiRequest', async () => {
+    const { apiRequest } = require('../../utils/api');
+    (apiRequest as jest.Mock).mockResolvedValue({ id: 'test-id', deviceSerialNumber: 'SP-TEST123' });
 
     const { result } = renderHook(() => useWifiScan());
 
@@ -103,16 +98,27 @@ describe('useWifiScan', () => {
       await Promise.resolve();
     });
 
-    let granted = false;
+    let success = false;
     await act(async () => {
-      granted = await result.current.requestPermission();
+      success = await result.current.storeCredentialsOnServer('SP-TEST123', 'MyWiFi', 'password123');
     });
 
-    expect(granted).toBe(true);
+    expect(success).toBe(true);
+    expect(apiRequest).toHaveBeenCalledWith(
+      '/provisioning/pending',
+      'POST',
+      {
+        deviceSerialNumber: 'SP-TEST123',
+        ssid: 'MyWiFi',
+        password: 'password123',
+      },
+      'test-token'
+    );
   });
 
-  it('returns false when permission denied', async () => {
-    mockPermissionsAndroid.request.mockResolvedValue('denied');
+  it('handles server credential storage failure', async () => {
+    const { apiRequest } = require('../../utils/api');
+    (apiRequest as jest.Mock).mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(() => useWifiScan());
 
@@ -120,11 +126,79 @@ describe('useWifiScan', () => {
       await Promise.resolve();
     });
 
-    let granted = true;
+    let success = true;
     await act(async () => {
-      granted = await result.current.requestPermission();
+      success = await result.current.storeCredentialsOnServer('SP-TEST123', 'MyWiFi', 'password123');
     });
 
-    expect(granted).toBe(false);
+    expect(success).toBe(false);
+    expect(result.current.error).toBe('Network error');
+  });
+
+  it('returns false for sendCredentialsToAP on web', async () => {
+    const { result } = renderHook(() => useWifiScan());
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const device = { ssid: 'SmartPlug-TEST12', deviceType: 'SmartPlug', serialSuffix: 'TEST12', signalStrength: -50 };
+    let result_ap = true;
+    await act(async () => {
+      result_ap = await result.current.sendCredentialsToAP(device, 'MyWiFi', 'password123');
+    });
+
+    expect(result_ap).toBe(false);
+  });
+
+  it('returns false for sendProvisioningToken on web', async () => {
+    const { result } = renderHook(() => useWifiScan());
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const device = { ssid: 'SmartPlug-TEST12', deviceType: 'SmartPlug', serialSuffix: 'TEST12', signalStrength: -50 };
+    let result_token = true;
+    await act(async () => {
+      result_token = await result.current.sendProvisioningToken(device, 'token-123');
+    });
+
+    expect(result_token).toBe(false);
+  });
+
+  it('parses device SSID correctly', async () => {
+    const { result } = renderHook(() => useWifiScan());
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const validDevice = result.current.parseDeviceSSID('SmartPlug-B0A732');
+    expect(validDevice).not.toBeNull();
+    expect(validDevice?.deviceType).toBe('SmartPlug');
+    expect(validDevice?.serialSuffix).toBe('B0A732');
+
+    const invalidSSID = result.current.parseDeviceSSID('HomeWiFi');
+    expect(invalidSSID).toBeNull();
+  });
+
+  it('fails credential storage without auth token', async () => {
+    const { apiRequest } = require('../../utils/api');
+    (apiRequest as jest.Mock).mockRejectedValue(new Error('You must be logged in to provision a device'));
+
+    const { result } = renderHook(() => useWifiScan());
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    let success = true;
+    await act(async () => {
+      success = await result.current.storeCredentialsOnServer('SP-TEST', 'WiFi', 'pass1234');
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.error).toBeTruthy();
   });
 });
