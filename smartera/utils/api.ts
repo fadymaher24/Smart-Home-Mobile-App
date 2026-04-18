@@ -28,7 +28,25 @@ const resolveLocalApiBaseUrl = (): string => {
   return host ? `http://${host}:3000/api` : 'http://localhost:3000/api';
 };
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || resolveLocalApiBaseUrl();
+const DEFAULT_RELEASE_API_BASE_URL = 'http://192.168.1.57:3000/api';
+
+const resolveApiBaseUrl = (): string => {
+  const constants = Constants as unknown as ExpoConstantsShape & {
+    expoConfig?: { extra?: { apiUrl?: string } };
+  };
+
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
+  if (fromEnv) return fromEnv;
+
+  const fromExpoExtra = constants.expoConfig?.extra?.apiUrl;
+  if (fromExpoExtra) return fromExpoExtra;
+
+  if (__DEV__) return resolveLocalApiBaseUrl();
+
+  return DEFAULT_RELEASE_API_BASE_URL;
+};
+
+const API_BASE_URL = resolveApiBaseUrl().replace(/\/+$/, '');
 
 export { API_BASE_URL };
 
