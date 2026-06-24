@@ -35,7 +35,7 @@
       "package": "com.anonymous.smartera"
     },
     "extra": {
-      "apiUrl": "http://192.168.1.57:3000/api"
+      "apiUrl": "http://localhost:3000/api"
     },
     "web": {
       "bundler": "metro",

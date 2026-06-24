@@ -13,20 +13,18 @@ export default function ProvisioningIndex() {
       return;
     }
 
-    if (state.phase === 'idle' || state.phase === 'error') {
+    if (state.phase === 'idle' || state.phase === 'instructions' || state.phase === 'error' || state.phase === 'timeout') {
       router.replace('./scan');
-    } else if (state.phase === 'scanning') {
+    } else if (state.phase === 'ble_scanning' || state.phase === 'ble_device_found' || state.phase === 'ble_connecting') {
       router.replace('./scan');
-    } else if (state.phase === 'device_selected' || state.phase === 'ap_connected') {
+    } else if (state.phase === 'ble_connected' || state.phase === 'wifi_scan_requested' || state.phase === 'wifi_scan_results') {
       router.replace('./connect');
-    } else if (
-      state.phase === 'credentials_sent' ||
-      state.phase === 'wifi_connecting' ||
-      state.phase === 'mqtt_connecting'
-    ) {
+    } else if (state.phase === 'credentials_sent' || state.phase === 'wifi_connecting' || state.phase === 'cloud_verifying') {
       router.replace('./progress');
     } else if (state.phase === 'claimed' || state.phase === 'complete') {
       router.replace('./success');
+    } else {
+      router.replace('./connect');
     }
   }, [router, state.phase]);
 

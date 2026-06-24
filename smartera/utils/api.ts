@@ -28,7 +28,7 @@ const resolveLocalApiBaseUrl = (): string => {
   return host ? `http://${host}:3000/api` : 'http://localhost:3000/api';
 };
 
-const DEFAULT_RELEASE_API_BASE_URL = 'http://192.168.1.57:3000/api';
+const DEFAULT_RELEASE_API_BASE_URL = 'http://localhost:3000/api';
 
 const resolveApiBaseUrl = (): string => {
   const constants = Constants as unknown as ExpoConstantsShape & {

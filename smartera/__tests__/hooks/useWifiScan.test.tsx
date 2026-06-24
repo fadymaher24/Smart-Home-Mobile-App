@@ -142,7 +142,7 @@ describe('useWifiScan', () => {
       await Promise.resolve();
     });
 
-    const device = { ssid: 'SmartPlug-TEST12', deviceType: 'SmartPlug', serialSuffix: 'TEST12', signalStrength: -50 };
+    const device = { id: '1', name: 'SmartPlug-TEST12', serialNumber: 'SmartPlug-TEST12', rssi: -50 };
     let result_ap = true;
     await act(async () => {
       result_ap = await result.current.sendCredentialsToAP(device, 'MyWiFi', 'password123');
@@ -158,7 +158,7 @@ describe('useWifiScan', () => {
       await Promise.resolve();
     });
 
-    const device = { ssid: 'SmartPlug-TEST12', deviceType: 'SmartPlug', serialSuffix: 'TEST12', signalStrength: -50 };
+    const device = { id: '1', name: 'SmartPlug-TEST12', serialNumber: 'SmartPlug-TEST12', rssi: -50 };
     let result_token = true;
     await act(async () => {
       result_token = await result.current.sendProvisioningToken(device, 'token-123');
@@ -176,8 +176,8 @@ describe('useWifiScan', () => {
 
     const validDevice = result.current.parseDeviceSSID('SmartPlug-B0A732');
     expect(validDevice).not.toBeNull();
-    expect(validDevice?.deviceType).toBe('SmartPlug');
-    expect(validDevice?.serialSuffix).toBe('B0A732');
+    expect(validDevice?.name).toBe('SmartPlug-B0A732');
+    expect(validDevice?.serialNumber).toBe('SmartPlug-B0A732');
 
     const invalidSSID = result.current.parseDeviceSSID('HomeWiFi');
     expect(invalidSSID).toBeNull();

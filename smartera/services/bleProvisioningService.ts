@@ -15,6 +15,34 @@ export interface BleGatewayStatus {
   transport?: string;
 }
 
+export interface BleWifiNetwork {
+  ssid: string;
+  rssi: number;
+  band: '2.4GHz' | '5GHz' | 'unknown';
+  security?: string;
+}
+
+export interface BleDebugSnapshot {
+  updatedAt: number;
+  lastWifiScan?: {
+    serialNumber: string;
+    msgId: string;
+    received: boolean;
+    networkCount: number;
+    payloadShape: BleWifiPayloadShape;
+    error?: string;
+  };
+  lastProvision?: {
+    serialNumber: string;
+    msgId: string;
+    ackReceived: boolean;
+    ackAttempts: number;
+    error?: string;
+  };
+}
+
+type BleWifiPayloadShape = 'envelope' | 'networks-array' | 'array' | 'none' | 'error';
+
 export type SmarteraRemoteAction =
   | 'pair'
   | 'unpair'
@@ -29,6 +57,7 @@ interface ProvisionOverBleInput {
   ssid: string;
   password: string;
   token?: string;
+  deviceId?: string;
 }
 
 interface RemoteCommandInput {
@@ -55,9 +84,27 @@ const BLE_SERVICE_UUID = '5af13000-88f6-4a20-b0ce-c45f6695d550';
 const BLE_PROVISION_CHAR_UUID = '5af13001-88f6-4a20-b0ce-c45f6695d550';
 const BLE_REMOTE_CHAR_UUID = '5af13002-88f6-4a20-b0ce-c45f6695d550';
 const BLE_STATUS_CHAR_UUID = '5af13003-88f6-4a20-b0ce-c45f6695d550';
+const BLE_WIFI_SCAN_CHAR_UUID = '5af13004-88f6-4a20-b0ce-c45f6695d550';
 
 const DEFAULT_SCAN_TIMEOUT_MS = 7000;
 const DEFAULT_REMOTE_ID = 'smartera-app';
+const PROVISION_ACK_MAX_ATTEMPTS = 3;
+const WIFI_SCAN_READ_MAX_ATTEMPTS = 4;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const nextMsgId = () => `msg_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+
+const safeParseBase64Json = (value?: string | null): any | null => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(fromBase64(value));
+  } catch {
+    return null;
+  }
+};
 
 let bleManagerInstance: BleManagerLike | null = null;
 
@@ -219,7 +266,7 @@ const scanForPlugs = async (targetSerial?: string, timeoutMs = DEFAULT_SCAN_TIME
       finish();
     }, timeoutMs);
 
-    manager.startDeviceScan(null, null, (scanError, device) => {
+    manager.startDeviceScan([BLE_SERVICE_UUID], null, (scanError, device) => {
       if (scanError) {
         finish(new Error(scanError.message || 'Bluetooth scan failed'));
         return;
@@ -254,7 +301,21 @@ const scanForPlugs = async (targetSerial?: string, timeoutMs = DEFAULT_SCAN_TIME
   });
 };
 
-const connectToPlug = async (serialNumber: string): Promise<any> => {
+const connectToPlug = async (serialNumber: string, deviceId?: string): Promise<any> => {
+  if (deviceId) {
+    const manager = getBleManager();
+    await ensureBlePermissions();
+    await ensureBluetoothReady(manager);
+
+    try {
+      const connected = await manager.connectToDevice(deviceId, { timeout: 10000 });
+      await connected.discoverAllServicesAndCharacteristics();
+      return connected;
+    } catch (error) {
+      console.warn('[BLE] Direct reconnect failed; retrying discovery by serial.', error);
+    }
+  }
+
   let plugs = await scanForPlugs(serialNumber);
   let selectedPlug = plugs[0];
 
@@ -304,6 +365,15 @@ const safeDisconnect = async (device: any): Promise<void> => {
 };
 
 class BleProvisioningService {
+  private debugSnapshot: BleDebugSnapshot = {
+    updatedAt: Date.now(),
+  };
+  private wifiScanSupportBySerial: Map<string, boolean> = new Map();
+
+  getDebugSnapshot(): BleDebugSnapshot {
+    return JSON.parse(JSON.stringify(this.debugSnapshot));
+  }
+
   isSupported(): boolean {
     return Platform.OS !== 'web';
   }
@@ -315,7 +385,7 @@ class BleProvisioningService {
     return scanForPlugs(targetSerial);
   }
 
-  async provisionDevice(input: ProvisionOverBleInput): Promise<{ deviceName: string; serialNumber: string }> {
+  async provisionDevice(input: ProvisionOverBleInput): Promise<{ deviceName: string; serialNumber: string; ackReceived: boolean }> {
     if (!this.isSupported()) {
       throw new Error('Bluetooth provisioning is not available on web.');
     }
@@ -331,9 +401,12 @@ class BleProvisioningService {
 
     let device: any;
     try {
-      device = await connectToPlug(serial);
+      device = await connectToPlug(serial, input.deviceId);
+      const msgId = nextMsgId();
+      let ackAttempts = 0;
 
       const payload = {
+        msgId,
         ssid: input.ssid.trim(),
         password: input.password,
         token: input.token || '',
@@ -345,10 +418,243 @@ class BleProvisioningService {
         toBase64(JSON.stringify(payload))
       );
 
+      let ackMatched = false;
+      for (let attempt = 0; attempt < PROVISION_ACK_MAX_ATTEMPTS; attempt++) {
+        ackAttempts = attempt + 1;
+        const ack = await device.readCharacteristicForService(
+          BLE_SERVICE_UUID,
+          BLE_PROVISION_CHAR_UUID
+        );
+
+        if (ack?.value) {
+          const parsed = JSON.parse(fromBase64(ack.value));
+          if (parsed?.type === 'provision_ack' && parsed?.msgId === msgId) {
+            if (!parsed.ok) {
+              throw new Error(parsed?.message || 'Device rejected credentials.');
+            }
+            ackMatched = true;
+            break;
+          }
+        }
+        await sleep(250);
+      }
+
+      if (!ackMatched) {
+        console.warn('[BLE] Provision ACK not received in time; continuing with cloud confirmation fallback.');
+      }
+
+      this.debugSnapshot = {
+        ...this.debugSnapshot,
+        updatedAt: Date.now(),
+        lastProvision: {
+          serialNumber: serial,
+          msgId,
+          ackReceived: ackMatched,
+          ackAttempts,
+        },
+      };
+
       return {
         deviceName: device.name || device.localName || `${BLE_NAME_PREFIX}${serial}`,
         serialNumber: serial,
+        ackReceived: ackMatched,
       };
+    } catch (error: any) {
+      this.debugSnapshot = {
+        ...this.debugSnapshot,
+        updatedAt: Date.now(),
+        lastProvision: {
+          serialNumber: serial,
+          msgId: 'unknown',
+          ackReceived: false,
+          ackAttempts: 0,
+          error: error?.message || 'provision_error',
+        },
+      };
+      throw error;
+    } finally {
+      await safeDisconnect(device);
+    }
+  }
+
+  async scanWifiNetworks(serialNumber: string, deviceId?: string): Promise<BleWifiNetwork[]> {
+    if (!this.isSupported()) {
+      throw new Error('Bluetooth WiFi scanning is not available on web.');
+    }
+
+    const serial = normalizeSerial(serialNumber);
+    if (!serial) {
+      throw new Error('Device serial number is required.');
+    }
+
+    const cachedSupport = this.wifiScanSupportBySerial.get(serial);
+    if (cachedSupport === false) {
+      this.debugSnapshot = {
+        ...this.debugSnapshot,
+        updatedAt: Date.now(),
+        lastWifiScan: {
+          serialNumber: serial,
+          msgId: 'cached-unsupported',
+          received: false,
+          networkCount: 0,
+          payloadShape: 'none',
+          error: 'wifi_scan_not_supported_on_firmware_cached',
+        },
+      };
+      return [];
+    }
+
+    let device: any;
+    try {
+      device = await connectToPlug(serial, deviceId);
+
+      const msgId = nextMsgId();
+
+      await device.writeCharacteristicWithResponseForService(
+        BLE_SERVICE_UUID,
+        BLE_WIFI_SCAN_CHAR_UUID,
+        toBase64(JSON.stringify({ action: 'scan_wifi', msgId }))
+      );
+
+      let source: any[] = [];
+      let received = false;
+      let payloadShape: BleWifiPayloadShape = 'none';
+
+      for (let attempt = 0; attempt < WIFI_SCAN_READ_MAX_ATTEMPTS; attempt++) {
+        const scanResult = await device.readCharacteristicForService(
+          BLE_SERVICE_UUID,
+          BLE_WIFI_SCAN_CHAR_UUID
+        );
+
+        if (scanResult?.value) {
+          const parsed = safeParseBase64Json(scanResult.value);
+          if (!parsed) {
+            await sleep(400);
+            continue;
+          }
+
+          if (parsed?.type === 'wifi_scan_result' && (!parsed?.msgId || parsed?.msgId === msgId)) {
+            if (!parsed.ok) {
+              const errorCode = parsed?.errorCode || 'wifi_scan_failed';
+              if (String(errorCode).toLowerCase().includes('not_supported')) {
+                this.wifiScanSupportBySerial.set(serial, false);
+              }
+              this.debugSnapshot = {
+                ...this.debugSnapshot,
+                updatedAt: Date.now(),
+                lastWifiScan: {
+                  serialNumber: serial,
+                  msgId,
+                  received: true,
+                  networkCount: 0,
+                  payloadShape: 'envelope',
+                  error: errorCode,
+                },
+              };
+              return [];
+            }
+            source = Array.isArray(parsed?.networks) ? parsed.networks : [];
+            received = true;
+            payloadShape = 'envelope';
+            break;
+          }
+
+          if (typeof parsed?.ssid === 'string') {
+            source = [parsed];
+            received = true;
+            payloadShape = 'array';
+            break;
+          }
+
+          if (Array.isArray(parsed?.networks)) {
+            source = parsed.networks;
+            received = true;
+            payloadShape = 'networks-array';
+            break;
+          }
+
+          if (Array.isArray(parsed)) {
+            source = parsed;
+            received = true;
+            payloadShape = 'array';
+            break;
+          }
+        }
+
+        await sleep(400);
+      }
+
+      if (!received) {
+        this.debugSnapshot = {
+          ...this.debugSnapshot,
+          updatedAt: Date.now(),
+          lastWifiScan: {
+            serialNumber: serial,
+            msgId,
+            received: false,
+            networkCount: 0,
+            payloadShape: 'none',
+          },
+        };
+        return [];
+      }
+
+      const list = source
+        .map((network: any): BleWifiNetwork | null => {
+          const ssid = typeof network?.ssid === 'string' ? network.ssid.trim() : '';
+          if (!ssid) {
+            return null;
+          }
+
+          const rawBand = typeof network?.band === 'string' ? network.band : 'unknown';
+          const normalizedBand: BleWifiNetwork['band'] =
+            rawBand === '2.4GHz' || rawBand === '5GHz' ? rawBand : 'unknown';
+
+          return {
+            ssid,
+            rssi: typeof network?.rssi === 'number' ? network.rssi : -100,
+            band: normalizedBand,
+            security: typeof network?.security === 'string' ? network.security : undefined,
+          };
+        })
+        .filter((network: BleWifiNetwork | null): network is BleWifiNetwork => !!network)
+        .sort((a, b) => b.rssi - a.rssi);
+
+      this.debugSnapshot = {
+        ...this.debugSnapshot,
+        updatedAt: Date.now(),
+        lastWifiScan: {
+          serialNumber: serial,
+          msgId,
+          received: true,
+          networkCount: list.length,
+          payloadShape,
+        },
+      };
+
+      return list;
+    } catch (error: any) {
+      const normalizedError = error?.message?.toLowerCase?.().includes('operation was rejected')
+        ? 'wifi_scan_not_supported_on_firmware'
+        : (error?.message || 'wifi_scan_error');
+
+      if (normalizedError.includes('not_supported')) {
+        this.wifiScanSupportBySerial.set(serial, false);
+      }
+
+      this.debugSnapshot = {
+        ...this.debugSnapshot,
+        updatedAt: Date.now(),
+        lastWifiScan: {
+          serialNumber: serial,
+          msgId: 'unknown',
+          received: false,
+          networkCount: 0,
+          payloadShape: 'error',
+          error: normalizedError,
+        },
+      };
+      return [];
     } finally {
       await safeDisconnect(device);
     }

@@ -168,15 +168,15 @@ export function useWifiScan(): UseWifiScanReturn {
         const match = network.SSID?.match(DEVICE_SSID_PATTERN);
         if (match) {
           smartDevices.push({
-            ssid: network.SSID,
-            deviceType: match[1],
-            serialSuffix: match[2],
-            signalStrength: network.level || -50,
+            id: network.BSSID || network.SSID,
+            name: network.SSID,
+            serialNumber: `${match[1]}-${match[2]}`,
+            rssi: network.level || -50,
           });
         }
       }
 
-      smartDevices.sort((a, b) => b.signalStrength - a.signalStrength);
+      smartDevices.sort((a, b) => b.rssi - a.rssi);
       setDevices(smartDevices);
 
       if (smartDevices.length === 0) {
@@ -213,7 +213,7 @@ export function useWifiScan(): UseWifiScanReturn {
         throw new Error('WiFi module not available');
       }
 
-      await WifiApi.connectToProtectedSSID(device.ssid, DEVICE_AP_PASSWORD, false);
+      await WifiApi.connectToProtectedSSID(device.name, DEVICE_AP_PASSWORD, false);
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -241,7 +241,7 @@ export function useWifiScan(): UseWifiScanReturn {
       try {
         const savedNetworks = require('react-native-wifi-reimagined')?.default;
         if (savedNetworks?.disconnectFromSSID) {
-          await savedNetworks.disconnectFromSSID(device.ssid);
+          await savedNetworks.disconnectFromSSID(device.name);
         }
       } catch {}
 
@@ -315,10 +315,10 @@ export function useWifiScan(): UseWifiScanReturn {
     }
 
     return {
-      ssid,
-      deviceType: match[1],
-      serialSuffix: match[2],
-      signalStrength: -50,
+      id: ssid,
+      name: ssid,
+      serialNumber: `${match[1]}-${match[2]}`,
+      rssi: -50,
     };
   };
 

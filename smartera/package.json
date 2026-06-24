@@ -3,12 +3,13 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start --dev-client --host lan",
-    "start:clear": "expo start --dev-client --host lan --clear",
+    "sync:env": "node ../scripts/sync-env-config.js",
+    "start": "npm run sync:env && expo start --dev-client --host lan",
+    "start:clear": "npm run sync:env && expo start --dev-client --host lan --clear",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
-    "web": "expo start --web",
+    "android": "npm run sync:env && expo run:android",
+    "ios": "npm run sync:env && expo run:ios",
+    "web": "npm run sync:env && expo start --web",
     "test": "jest --watchAll",
     "lint": "expo lint"
   },

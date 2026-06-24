@@ -1,37 +1,50 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useReducer, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type ProvisioningPhase =
   | 'idle'
-  | 'scanning'
-  | 'device_selected'
-  | 'ap_connected'
+  | 'instructions'
+  | 'ble_scanning'
+  | 'ble_device_found'
+  | 'ble_connecting'
+  | 'ble_connected'
+  | 'wifi_scan_requested'
+  | 'wifi_scan_results'
   | 'credentials_sent'
   | 'wifi_connecting'
-  | 'mqtt_connecting'
+  | 'cloud_verifying'
   | 'claimed'
   | 'complete'
+  | 'timeout'
   | 'error';
 
 export type ProvisioningErrorCode =
   | 'SCAN_FAILED'
-  | 'AP_CONNECTION_FAILED'
-  | 'AP_TIMEOUT'
+  | 'BLE_CONNECT_FAILED'
+  | 'BLE_TIMEOUT'
   | 'CREDENTIALS_REJECTED'
   | 'WIFI_AUTH_FAILED'
   | 'WIFI_NOT_FOUND'
   | 'WIFI_TIMEOUT'
   | 'WIFI_SIGNAL_WEAK'
-  | 'MQTT_CONNECTION_FAILED'
+  | 'CLOUD_VERIFICATION_FAILED'
+  | 'CLOUD_TIMEOUT'
   | 'CLAIM_FAILED'
   | 'SESSION_EXPIRED'
   | 'UNKNOWN';
 
 export interface DiscoveredDevice {
+  id: string;
+  name: string;
+  serialNumber: string;
+  rssi: number;
+}
+
+export interface WifiNetworkOption {
   ssid: string;
-  deviceType: string;
-  serialSuffix: string;
-  signalStrength: number;
+  rssi: number;
+  band: '2.4GHz' | '5GHz' | 'unknown';
+  security?: string;
 }
 
 export interface ProvisioningError {
@@ -46,9 +59,13 @@ export interface ProvisioningState {
   token: string | null;
   device: DiscoveredDevice | null;
   selectedSSID: string | null;
+  availableNetworks: WifiNetworkOption[];
   error: ProvisioningError | null;
   startedAt: number | null;
+  deadlineAt: number | null;
   lastUpdated: number | null;
+  deviceName: string;
+  roomName: string;
 }
 
 type ProvisioningAction =
@@ -56,6 +73,8 @@ type ProvisioningAction =
   | { type: 'SET_PHASE'; payload: ProvisioningPhase }
   | { type: 'SELECT_DEVICE'; payload: DiscoveredDevice }
   | { type: 'SET_WIFI'; payload: string }
+  | { type: 'SET_NETWORKS'; payload: WifiNetworkOption[] }
+  | { type: 'SET_METADATA'; payload: { deviceName?: string; roomName?: string } }
   | { type: 'SET_ERROR'; payload: ProvisioningError }
   | { type: 'CLEAR_ERROR' }
   | { type: 'RESET' }
@@ -67,12 +86,17 @@ const initialState: ProvisioningState = {
   token: null,
   device: null,
   selectedSSID: null,
+  availableNetworks: [],
   error: null,
   startedAt: null,
+  deadlineAt: null,
   lastUpdated: null,
+  deviceName: '',
+  roomName: 'Living Room',
 };
 
 const STORAGE_KEY = '@provisioning_session';
+const GLOBAL_TIMEOUT_MS = 180 * 1000;
 
 function provisioningReducer(state: ProvisioningState, action: ProvisioningAction): ProvisioningState {
   switch (action.type) {
@@ -81,8 +105,9 @@ function provisioningReducer(state: ProvisioningState, action: ProvisioningActio
         ...state,
         sessionId: action.payload.sessionId,
         token: action.payload.token,
-        phase: 'scanning',
+        phase: 'instructions',
         startedAt: Date.now(),
+        deadlineAt: Date.now() + GLOBAL_TIMEOUT_MS,
         lastUpdated: Date.now(),
       };
     case 'SET_PHASE':
@@ -95,13 +120,26 @@ function provisioningReducer(state: ProvisioningState, action: ProvisioningActio
       return {
         ...state,
         device: action.payload,
-        phase: 'device_selected',
+        phase: 'ble_device_found',
         lastUpdated: Date.now(),
       };
     case 'SET_WIFI':
       return {
         ...state,
         selectedSSID: action.payload,
+        lastUpdated: Date.now(),
+      };
+    case 'SET_NETWORKS':
+      return {
+        ...state,
+        availableNetworks: action.payload,
+        lastUpdated: Date.now(),
+      };
+    case 'SET_METADATA':
+      return {
+        ...state,
+        deviceName: action.payload.deviceName ?? state.deviceName,
+        roomName: action.payload.roomName ?? state.roomName,
         lastUpdated: Date.now(),
       };
     case 'SET_ERROR':
@@ -135,9 +173,11 @@ interface ProvisioningContextValue {
   setPhase: (phase: ProvisioningPhase) => void;
   selectDevice: (device: DiscoveredDevice) => void;
   setWifi: (ssid: string) => void;
+  setNetworks: (networks: WifiNetworkOption[]) => void;
+  setMetadata: (values: { deviceName?: string; roomName?: string }) => void;
   setError: (code: ProvisioningErrorCode, message: string, retryable?: boolean) => void;
   clearError: () => void;
-  reset: () => void;
+  reset: () => Promise<void>;
 }
 
 const ProvisioningContext = createContext<ProvisioningContextValue | undefined>(undefined);
@@ -145,12 +185,10 @@ const ProvisioningContext = createContext<ProvisioningContextValue | undefined>(
 export function ProvisioningProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(provisioningReducer, initialState);
 
-  // Restore state from AsyncStorage on mount
   useEffect(() => {
     restoreState();
   }, []);
 
-  // Persist state changes to AsyncStorage
   useEffect(() => {
     if (state.phase !== 'idle') {
       saveState(state);
@@ -160,23 +198,26 @@ export function ProvisioningProvider({ children }: { children: ReactNode }) {
   const restoreState = async () => {
     try {
       const saved = await AsyncStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as ProvisioningState;
-        // Don't restore sessions older than 10 minutes
-        if (parsed.startedAt && Date.now() - parsed.startedAt < 10 * 60 * 1000) {
-          dispatch({ type: 'RESTORE', payload: parsed });
-        } else {
-          await AsyncStorage.removeItem(STORAGE_KEY);
-        }
+      if (!saved) {
+        return;
       }
+
+      const parsed = JSON.parse(saved) as ProvisioningState;
+      const now = Date.now();
+      if (!parsed.deadlineAt || now > parsed.deadlineAt) {
+        await AsyncStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+
+      dispatch({ type: 'RESTORE', payload: parsed });
     } catch (error) {
       console.error('Failed to restore provisioning state:', error);
     }
   };
 
-  const saveState = async (state: ProvisioningState) => {
+  const saveState = async (nextState: ProvisioningState) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
     } catch (error) {
       console.error('Failed to save provisioning state:', error);
     }
@@ -196,6 +237,14 @@ export function ProvisioningProvider({ children }: { children: ReactNode }) {
 
   const setWifi = (ssid: string) => {
     dispatch({ type: 'SET_WIFI', payload: ssid });
+  };
+
+  const setNetworks = (networks: WifiNetworkOption[]) => {
+    dispatch({ type: 'SET_NETWORKS', payload: networks });
+  };
+
+  const setMetadata = (values: { deviceName?: string; roomName?: string }) => {
+    dispatch({ type: 'SET_METADATA', payload: values });
   };
 
   const setError = (code: ProvisioningErrorCode, message: string, retryable = false) => {
@@ -219,6 +268,8 @@ export function ProvisioningProvider({ children }: { children: ReactNode }) {
         setPhase,
         selectDevice,
         setWifi,
+        setNetworks,
+        setMetadata,
         setError,
         clearError,
         reset,

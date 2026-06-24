@@ -4,7 +4,14 @@ import { API_BASE_URL } from '../utils/api';
 import { DeviceTelemetry } from './deviceService';
 
 type MessageHandler = (data: any) => void;
-type EventType = 'telemetry' | 'device-status' | 'notification' | 'alert' | 'connection';
+type EventType =
+  | 'telemetry'
+  | 'device-status'
+  | 'notification'
+  | 'alert'
+  | 'connection'
+  | 'provisioning-phase'
+  | 'provisioning-claimed';
 
 class RealtimeService {
   private socket: Socket | null = null;
@@ -21,6 +28,8 @@ class RealtimeService {
     this.handlers.set('notification', new Set());
     this.handlers.set('alert', new Set());
     this.handlers.set('connection', new Set());
+    this.handlers.set('provisioning-phase', new Set());
+    this.handlers.set('provisioning-claimed', new Set());
   }
 
   // Connect to Socket.IO server
@@ -100,6 +109,16 @@ class RealtimeService {
 
         this.socket.on('subscribed', (data) => {
           console.log(`[Socket.IO] Subscribed to device: ${data.deviceName}`);
+        });
+
+        this.socket.on('provisioning:phase_changed', (data) => {
+          console.log('[Socket.IO] Provisioning phase changed:', data);
+          this.notifyHandlers('provisioning-phase', data);
+        });
+
+        this.socket.on('provisioning:device_claimed', (data) => {
+          console.log('[Socket.IO] Provisioning claimed:', data);
+          this.notifyHandlers('provisioning-claimed', data);
         });
 
         this.socket.on('connect_error', (error) => {

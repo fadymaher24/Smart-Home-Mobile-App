@@ -17,14 +17,14 @@ const ERROR_MESSAGES: Record<ProvisioningErrorCode, { title: string; message: st
     message: 'provisioning.error.scanFailed',
     retryable: true,
   },
-  AP_CONNECTION_FAILED: {
-    title: 'provisioning.error.apFailedTitle',
-    message: 'provisioning.error.apFailedMsg',
+  BLE_CONNECT_FAILED: {
+    title: 'provisioning.error.bleFailedTitle',
+    message: 'provisioning.error.bleFailedMsg',
     retryable: true,
   },
-  AP_TIMEOUT: {
-    title: 'provisioning.error.apTimeoutTitle',
-    message: 'provisioning.error.apTimeoutMsg',
+  BLE_TIMEOUT: {
+    title: 'provisioning.error.bleTimeoutTitle',
+    message: 'provisioning.error.bleTimeoutMsg',
     retryable: true,
   },
   CREDENTIALS_REJECTED: {
@@ -52,9 +52,14 @@ const ERROR_MESSAGES: Record<ProvisioningErrorCode, { title: string; message: st
     message: 'provisioning.error.signalWeakMsg',
     retryable: true,
   },
-  MQTT_CONNECTION_FAILED: {
-    title: 'provisioning.error.mqttFailedTitle',
-    message: 'provisioning.error.mqttFailed',
+  CLOUD_VERIFICATION_FAILED: {
+    title: 'provisioning.error.cloudFailedTitle',
+    message: 'provisioning.error.cloudFailed',
+    retryable: true,
+  },
+  CLOUD_TIMEOUT: {
+    title: 'provisioning.error.cloudTimeoutTitle',
+    message: 'provisioning.error.cloudTimeout',
     retryable: true,
   },
   CLAIM_FAILED: {

@@ -18,14 +18,16 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { useTheme } from "../../context/ThemeContext";
+import { useAuth } from "../../context/AuthContext";
 import { Colors } from "../../utils/colors";
 import { useDevices, useRealtimeConnection, useRooms } from "../../hooks/useDeviceData";
-import { useAuth } from "../../context/AuthContext";
-import { apiRequest, ApiError } from "../../utils/api";
+import { API_BASE_URL, ApiError } from "../../utils/api";
 import { Device as ServiceDevice } from "../../services/deviceService";
 import { getCurrentWiFiSSID, parseSerialFromQRCode } from "../../utils/wifi";
 import { useBleProvisioning } from "../../hooks/useBleProvisioning";
 import { MaterialCommunityIcons, Ionicons, Feather } from "@expo/vector-icons";
+import bleProvisioningService, { BleDiscoveredPlug, BleWifiNetwork } from "../../services/bleProvisioningService";
+import realtimeService from "../../services/realtimeService";
 import QRScan from "./QRScan";
 
 // Device types matching backend
@@ -83,6 +85,7 @@ const DEVICE_TYPES: DeviceTypeOption[] = [
 ];
 
 const { width, height } = Dimensions.get("window");
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Suggested rooms for quick selection
 const SUGGESTED_ROOMS = [
@@ -95,6 +98,15 @@ const SUGGESTED_ROOMS = [
   { name: 'Garden', icon: 'flower', color: '#22C55E' },
   { name: 'Dining Room', icon: 'table-furniture', color: '#A16207' },
 ];
+
+type PairingStage =
+  | 'instruction'
+  | 'scanning'
+  | 'connect'
+  | 'wifi_scan'
+  | 'network'
+  | 'provisioning'
+  | 'success';
 
 // Animated Device Card Component
 const DeviceCard = ({
@@ -263,7 +275,6 @@ const AddDeviceModal = ({
   rooms,
   onCreateRoom,
   creatingRoom,
-  onProvisionWifi,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -272,7 +283,6 @@ const AddDeviceModal = ({
   rooms: Room[];
   onCreateRoom: (name: string, icon?: string) => Promise<Room>;
   creatingRoom: boolean;
-  onProvisionWifi?: () => void;
 }) => {
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -283,25 +293,27 @@ const AddDeviceModal = ({
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
   const [showNewRoomInput, setShowNewRoomInput] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
-  const [showProvisionForm, setShowProvisionForm] = useState(false);
-  const [provisionSsid, setProvisionSsid] = useState('');
-  const [provisionPassword, setProvisionPassword] = useState('');
-  const [provisionError, setProvisionError] = useState<string | null>(null);
-  const [provisionSending, setProvisionSending] = useState(false);
-  const [autoSsid, setAutoSsid] = useState<string | null>(null);
   const [scanningQR, setScanningQR] = useState(false);
-  const [useBlePairing, setUseBlePairing] = useState(false);
-  const [bleProgressMessage, setBleProgressMessage] = useState<string | null>(null);
+  const [pairingStage, setPairingStage] = useState<PairingStage | null>(null);
+  const [pairingStartedAt, setPairingStartedAt] = useState<number | null>(null);
+  const [pairingDeadlineAt, setPairingDeadlineAt] = useState<number | null>(null);
+  const [pairingRemainingSec, setPairingRemainingSec] = useState(180);
+  const [pairingError, setPairingError] = useState<string | null>(null);
+  const [pairingProgressText, setPairingProgressText] = useState<string | null>(null);
+  const [nearbyPlugs, setNearbyPlugs] = useState<BleDiscoveredPlug[]>([]);
+  const [selectedPlug, setSelectedPlug] = useState<BleDiscoveredPlug | null>(null);
+  const [wifiNetworks, setWifiNetworks] = useState<BleWifiNetwork[]>([]);
+  const [wifiSsid, setWifiSsid] = useState('');
+  const [wifiPassword, setWifiPassword] = useState('');
+  const [showWifiPassword, setShowWifiPassword] = useState(false);
+  const [pairingBusy, setPairingBusy] = useState(false);
+  const [provisioningSessionId, setProvisioningSessionId] = useState<string | null>(null);
+  const [provisioningToken, setProvisioningToken] = useState<string | null>(null);
+  const [manualWifiMode, setManualWifiMode] = useState(false);
+  const [manualWifiReason, setManualWifiReason] = useState<string | null>(null);
+  const [cloudConfirmPath, setCloudConfirmPath] = useState<'none' | 'realtime' | 'polling'>('none');
+  const [cloudConfirmError, setCloudConfirmError] = useState<string | null>(null);
   const { token } = useAuth();
-  const {
-    isSupported: bleSupported,
-    discoverNearbyPlugs,
-    provisionViaBle,
-    isScanning: bleScanning,
-    isProvisioning: bleProvisioning,
-    error: bleError,
-    clearError: clearBleError,
-  } = useBleProvisioning();
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -314,16 +326,26 @@ const AddDeviceModal = ({
       setSelectedRoomId(null);
       setShowNewRoomInput(false);
       setNewRoomName('');
-      setShowProvisionForm(false);
-      setProvisionSsid('');
-      setProvisionPassword('');
-      setProvisionError(null);
-      setProvisionSending(false);
-      setUseBlePairing(false);
-      setBleProgressMessage(null);
-      clearBleError();
       setScanningQR(false);
-      detectWifiSSID();
+      setPairingStage(null);
+      setPairingStartedAt(null);
+      setPairingDeadlineAt(null);
+      setPairingRemainingSec(180);
+      setPairingError(null);
+      setPairingProgressText(null);
+      setNearbyPlugs([]);
+      setSelectedPlug(null);
+      setWifiNetworks([]);
+      setWifiSsid('');
+      setWifiPassword('');
+      setShowWifiPassword(false);
+      setPairingBusy(false);
+      setProvisioningSessionId(null);
+      setProvisioningToken(null);
+      setManualWifiMode(false);
+      setManualWifiReason(null);
+      setCloudConfirmPath('none');
+      setCloudConfirmError(null);
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 1,
@@ -342,6 +364,26 @@ const AddDeviceModal = ({
       fadeAnim.setValue(0);
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (!pairingDeadlineAt || !pairingStage || pairingStage === 'success') {
+      return;
+    }
+
+    const updateRemaining = () => {
+      const left = Math.max(0, Math.ceil((pairingDeadlineAt - Date.now()) / 1000));
+      setPairingRemainingSec(left);
+
+      if (left === 0) {
+        setPairingError('Pairing timed out after 3 minutes. Please try again.');
+        setPairingBusy(false);
+      }
+    };
+
+    updateRemaining();
+    const timer = setInterval(updateRemaining, 1000);
+    return () => clearInterval(timer);
+  }, [pairingDeadlineAt, pairingStage]);
 
   const handleCreateRoom = async () => {
     if (!newRoomName.trim()) return;
@@ -394,13 +436,35 @@ const AddDeviceModal = ({
   };
 
   const handleBack = () => {
-    if (showProvisionForm) {
-      setShowProvisionForm(false);
-      setProvisionError(null);
-      setBleProgressMessage(null);
-      clearBleError();
-      return;
+    if (pairingStage) {
+      if (pairingStage === 'instruction') {
+        setPairingStage(null);
+        return;
+      }
+
+      if (pairingStage === 'network') {
+        setPairingStage('connect');
+        setPairingError(null);
+        return;
+      }
+
+      if (pairingStage === 'connect' || pairingStage === 'scanning') {
+        setPairingStage('instruction');
+        setPairingError(null);
+        return;
+      }
+
+      if (pairingStage === 'provisioning') {
+        setPairingError('Provisioning is in progress. Please wait a few seconds.');
+        return;
+      }
+
+      if (pairingStage === 'success') {
+        setPairingStage(null);
+        return;
+      }
     }
+
     if (showNewRoomInput) {
       setShowNewRoomInput(false);
       setNewRoomName('');
@@ -410,16 +474,6 @@ const AddDeviceModal = ({
       onClose();
     }
   };
-
-  const detectWifiSSID = async () => {
-      try {
-        const ssid = await getCurrentWiFiSSID();
-        if (ssid) {
-          setAutoSsid(ssid);
-          setProvisionSsid(ssid);
-        }
-      } catch {}
-    };
 
   const handleBarCodeScanned = (data: string) => {
     const parsed = parseSerialFromQRCode(data);
@@ -447,67 +501,298 @@ const AddDeviceModal = ({
     }
   };
 
-  const handleProvisionWifi = async () => {
-    if (!provisionSsid.trim() || !provisionPassword.trim()) {
-      setProvisionError('WiFi network name and password are required');
-      return;
-    }
+  const createProvisioningSession = async (): Promise<{ sessionId: string; sessionToken: string }> => {
     if (!token) {
-      setProvisionError('You must be logged in to provision a device');
-      return;
+      throw new Error('Please log in again before starting pairing.');
     }
 
-    setProvisionSending(true);
-    setProvisionError(null);
-    clearBleError();
-    setBleProgressMessage(null);
+    const response = await fetch(`${API_BASE_URL}/provisioning/session`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        deviceType: selectedType || 'SMART_PLUG',
+      }),
+    });
 
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.error || payload?.message || 'Failed to start pairing session.');
+    }
+
+    const data = await response.json();
+    setProvisioningSessionId(data.id);
+    setProvisioningToken(data.provisioningToken);
+    return {
+      sessionId: data.id,
+      sessionToken: data.provisioningToken,
+    };
+  };
+
+  const beginPairingFlow = () => {
+    const started = Date.now();
+    setPairingStartedAt(started);
+    setPairingDeadlineAt(started + 180 * 1000);
+    setPairingRemainingSec(180);
+    setPairingStage('instruction');
+    setPairingError(null);
+    setPairingProgressText(null);
+    setNearbyPlugs([]);
+    setSelectedPlug(null);
+    setWifiNetworks([]);
+    setWifiSsid('');
+    setWifiPassword('');
+    setShowWifiPassword(false);
+    setPairingBusy(false);
+    setManualWifiMode(false);
+    setManualWifiReason(null);
+    setCloudConfirmPath('none');
+    setCloudConfirmError(null);
+    setProvisioningSessionId(null);
+    setProvisioningToken(null);
+  };
+
+  const prefillPhoneWifiIfAvailable = async () => {
     try {
-      if (useBlePairing) {
-        setBleProgressMessage('Scanning nearby plugs over Bluetooth...');
-        const plugs = await discoverNearbyPlugs(serialNumber.trim());
-        if (plugs.length === 0) {
-          throw new Error('No nearby plug found over Bluetooth. Make sure the plug is powered on and in pairing mode.');
+      const current = await getCurrentWiFiSSID();
+      if (current?.trim()) {
+        setWifiSsid(current.trim());
+      }
+    } catch {
+      // best effort only
+    }
+  };
+
+  const waitForCloudClaim = async (sessionId: string, timeoutMs = 45_000) => {
+    if (!token) {
+      throw new Error('Authentication expired. Please log in and retry.');
+    }
+
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      const response = await fetch(`${API_BASE_URL}/provisioning/session/${sessionId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.status === 'claimed' || data?.status === 'registered') {
+          return;
         }
 
-        setBleProgressMessage('Sending WiFi credentials via Smartera-Remote...');
-        await provisionViaBle({
-          serialNumber: serialNumber.trim(),
-          ssid: provisionSsid.trim(),
-          password: provisionPassword.trim(),
-          token,
-        });
+        if (data?.status === 'failed' || data?.status === 'expired') {
+          throw new Error(data?.error || 'Pairing session failed before cloud registration.');
+        }
+      }
 
-        setBleProgressMessage('');
+      await new Promise(resolve => setTimeout(resolve, 1200));
+    }
 
-        Alert.alert(
-          'Bluetooth Pairing Complete',
-          `Smartera-Remote paired with "${serialNumber}" and sent WiFi credentials successfully.`,
-          [{ text: 'OK', onPress: () => {
-            setShowProvisionForm(false);
-          }}]
-        );
+    throw new Error('Cloud registration timed out. Keep the plug powered and retry.');
+  };
+
+  const waitForCloudClaimRealtime = async (sessionId: string) => {
+    if (!token) {
+      throw new Error('Authentication expired. Please log in and retry.');
+    }
+
+    let finished = false;
+
+    await realtimeService.connect(token).catch(() => {
+      throw new Error('Realtime connection unavailable. Falling back to polling...');
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        if (!finished) {
+          cleanup();
+          reject(new Error('Realtime confirmation timed out. Falling back to polling...'));
+        }
+      }, 20_000);
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        unsubscribeClaimed();
+        unsubscribePhase();
+      };
+
+      const unsubscribeClaimed = realtimeService.subscribe('provisioning-claimed', payload => {
+        if (payload?.sessionId === sessionId) {
+          finished = true;
+          cleanup();
+          resolve();
+        }
+      });
+
+      const unsubscribePhase = realtimeService.subscribe('provisioning-phase', payload => {
+        if (payload?.sessionId !== sessionId) {
+          return;
+        }
+
+        if (payload?.status === 'claimed') {
+          finished = true;
+          cleanup();
+          resolve();
+          return;
+        }
+
+        if (payload?.status === 'failed' || payload?.status === 'expired') {
+          finished = true;
+          cleanup();
+          reject(new Error(payload?.error || 'Pairing session failed before cloud registration.'));
+        }
+      });
+    });
+  };
+
+  const scanNearbyPlugs = async () => {
+    if (!serialNumber.trim()) {
+      setPairingError('Please enter your plug serial number first.');
+      return;
+    }
+
+    setPairingStage('scanning');
+    setPairingBusy(true);
+    setPairingError(null);
+    setPairingProgressText('Scanning devices nearby...');
+
+    try {
+      const plugs = await bleProvisioningService.discoverPlugs(serialNumber.trim());
+      setNearbyPlugs(plugs);
+
+      if (plugs.length === 0) {
+        setPairingError('No nearby plug found. Keep your phone close to the plug and retry.');
         return;
       }
 
-      await apiRequest('/provisioning/pending', 'POST', {
-        deviceSerialNumber: serialNumber.trim(),
-        ssid: provisionSsid.trim(),
-        password: provisionPassword.trim(),
-      }, token);
-
-      Alert.alert(
-        'WiFi Credentials Sent',
-        `WiFi credentials have been sent to device "${serialNumber}". Power on the device to complete setup.`,
-        [{ text: 'OK', onPress: () => {
-          setShowProvisionForm(false);
-          onClose();
-        }}]
-      );
+      const firstPlug = plugs[0];
+      setSelectedPlug(firstPlug);
+      setPairingProgressText(`Found ${firstPlug.name}. Connecting...`);
+      await connectPlugAndLoadWifi(firstPlug);
     } catch (err: any) {
-      setProvisionError(err?.message || 'Failed to send WiFi credentials');
+      setPairingError(err?.message || 'Bluetooth scan failed. Please try again.');
+      setPairingStage('instruction');
     } finally {
-      setProvisionSending(false);
+      setPairingBusy(false);
+    }
+  };
+
+  const connectPlugAndLoadWifi = async (plug: BleDiscoveredPlug) => {
+    setPairingBusy(true);
+    setPairingStage('connect');
+    setPairingError(null);
+
+    try {
+      setPairingProgressText(`Connected to ${plug.name}.`);
+      await sleep(350);
+
+      setPairingStage('wifi_scan');
+      setPairingProgressText('Scanning nearby Wi-Fi networks...');
+      const networks = await bleProvisioningService.scanWifiNetworks(plug.serialNumber, plug.id);
+      const sorted = [...networks].sort((a, b) => {
+        if (a.band === '2.4GHz' && b.band !== '2.4GHz') return -1;
+        if (a.band !== '2.4GHz' && b.band === '2.4GHz') return 1;
+        return b.rssi - a.rssi;
+      });
+      setWifiNetworks(sorted);
+      const recommended = sorted.find(n => n.band === '2.4GHz') || sorted[0];
+      setWifiSsid(recommended?.ssid || '');
+
+      if (sorted.length === 0) {
+        const scanDebug = bleProvisioningService.getDebugSnapshot().lastWifiScan;
+        const scanError = scanDebug?.error?.toLowerCase() || '';
+
+        if (scanError.includes('rejected') || scanError.includes('not_supported')) {
+          setPairingError('This plug firmware does not expose Wi-Fi scan over BLE. Enter SSID/password manually to continue.');
+          setManualWifiMode(true);
+          setManualWifiReason('firmware_not_supported');
+        } else {
+          setPairingError('No Wi-Fi list returned by device. Enter SSID manually or scan again.');
+          setManualWifiMode(false);
+          setManualWifiReason(null);
+        }
+
+        await prefillPhoneWifiIfAvailable();
+      } else {
+        setManualWifiMode(false);
+        setManualWifiReason(null);
+      }
+
+      setPairingStage('network');
+      setPairingProgressText(null);
+    } catch (err: any) {
+      setPairingError(err?.message || 'Failed to connect to plug. Retry scanning.');
+      setPairingStage('instruction');
+    } finally {
+      setPairingBusy(false);
+    }
+  };
+
+  const submitWifiProvisioning = async () => {
+    if (!selectedPlug) {
+      setPairingError('No plug selected. Start scan again.');
+      return;
+    }
+    if (!wifiSsid.trim() || wifiPassword.trim().length < 8) {
+      setPairingError('Enter a valid Wi-Fi name and password (8+ characters).');
+      return;
+    }
+    setPairingBusy(true);
+    setPairingStage('provisioning');
+    setPairingError(null);
+
+    try {
+      let sessionId = provisioningSessionId;
+      let sessionToken = provisioningToken;
+
+      if (!sessionId || !sessionToken) {
+        setPairingProgressText('Preparing secure pairing session...');
+        const session = await createProvisioningSession();
+        sessionId = session.sessionId;
+        sessionToken = session.sessionToken;
+      }
+
+      if (!sessionId || !sessionToken) {
+        throw new Error('Could not initialize pairing session. Please retry.');
+      }
+
+      setPairingProgressText('Sending Wi-Fi credentials securely...');
+      const provisionResult = await bleProvisioningService.provisionDevice({
+        serialNumber: selectedPlug.serialNumber,
+        deviceId: selectedPlug.id,
+        ssid: wifiSsid.trim(),
+        password: wifiPassword,
+        token: sessionToken,
+      });
+
+      if (!provisionResult.ackReceived) {
+        setPairingProgressText('Credentials sent. Waiting for device/cloud confirmation...');
+      } else {
+        setPairingProgressText('Plug is connecting to Wi-Fi and cloud...');
+      }
+
+      try {
+        await waitForCloudClaimRealtime(sessionId);
+        setCloudConfirmPath('realtime');
+        setCloudConfirmError(null);
+      } catch {
+        setCloudConfirmPath('polling');
+        setPairingProgressText('Waiting for cloud confirmation...');
+        await waitForCloudClaim(sessionId, 30_000);
+        setCloudConfirmError(null);
+      }
+
+      setPairingBusy(false);
+      setPairingStage('success');
+    } catch (err: any) {
+      setPairingBusy(false);
+      setPairingStage('network');
+      setCloudConfirmError(err?.message || 'cloud_confirmation_error');
+      setPairingError(err?.message || 'Failed to send credentials. Please retry.');
     }
   };
 
@@ -608,169 +893,229 @@ const AddDeviceModal = ({
         </Text>
       </View>
 
-      {/* Quick Provision with WiFi - Tuya-like flow */}
-      {serialNumber.trim() && !showProvisionForm && !scanningQR && (
+      {serialNumber.trim() && !scanningQR && !pairingStage && (
         <>
-          {bleSupported && Platform.OS !== 'web' && (
-            <TouchableOpacity
-              style={[styles.wifiProvisionButton, { backgroundColor: '#0F766E' }]}
-              onPress={() => {
-                if (!autoSsid) {
-                  detectWifiSSID();
-                }
-                setUseBlePairing(true);
-                setShowProvisionForm(true);
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="bluetooth" size={20} color="#fff" />
-              <View style={styles.wifiProvisionButtonTextContainer}>
-                <Text style={styles.wifiProvisionButtonText}>Bluetooth Pairing</Text>
-                <Text style={styles.wifiProvisionButtonSubtext}>
-                  Smartera-Remote fast pairing like Sonoff S40
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
-
           <TouchableOpacity
-            style={[styles.wifiProvisionButton, { backgroundColor: Colors.primary }]}
-            onPress={() => {
-              if (!autoSsid && Platform.OS !== 'web') {
-                detectWifiSSID();
-              }
-              setUseBlePairing(false);
-              setShowProvisionForm(true);
-            }}
+            style={[styles.wifiProvisionButton, { backgroundColor: '#0F766E' }]}
+            onPress={beginPairingFlow}
             activeOpacity={0.8}
           >
-            <Ionicons name="wifi" size={20} color="#fff" />
+            <Ionicons name="bluetooth" size={20} color="#fff" />
             <View style={styles.wifiProvisionButtonTextContainer}>
-              <Text style={styles.wifiProvisionButtonText}>Set up via WiFi</Text>
+              <Text style={styles.wifiProvisionButtonText}>Start Guided Pairing</Text>
               <Text style={styles.wifiProvisionButtonSubtext}>
-                {autoSsid ? `Connect to "${autoSsid}"` : 'Send WiFi credentials to the device'}
+                In-wizard flow: instruction, scan, Wi-Fi setup, and connection
               </Text>
             </View>
           </TouchableOpacity>
         </>
       )}
 
-      {/* WiFi Provisioning Form - Tuya-like: auto SSID + password only */}
-      {showProvisionForm && (
-        <View style={[styles.provisionForm, { backgroundColor: isDark ? '#1a1a1a' : '#f8f8f8' }]}>
-          <View style={[styles.provisionFormHeader, { borderBottomColor: isDark ? '#333' : '#eee' }]}>
-            <Ionicons name="wifi" size={24} color={Colors.primary} />
-            <View style={styles.provisionFormHeaderText}>
-              <Text style={[styles.provisionFormTitle, { color: isDark ? '#fff' : '#333' }]}> 
-                {useBlePairing ? 'Bluetooth Pairing' : 'WiFi Setup'}
-              </Text>
-              <Text style={[styles.provisionFormSubtext, { color: isDark ? '#888' : '#666' }]}> 
-                {useBlePairing
-                  ? `Smartera-Remote will discover ${serialNumber.trim()} and send credentials`
-                  : `Send WiFi credentials to ${serialNumber.trim()}`}
-              </Text>
+      {pairingStage && (
+        <View style={[styles.pairingCard, { backgroundColor: isDark ? '#181A24' : '#F8FAFF' }]}> 
+          <View style={styles.pairingHeaderRow}>
+            <Text style={[styles.pairingTitle, { color: isDark ? '#fff' : '#1F2937' }]}>Smart Plug Pairing</Text>
+            <View style={styles.timeoutBadge}>
+              <Ionicons name="time-outline" size={14} color="#5B6EF5" />
+              <Text style={styles.timeoutText}>{Math.floor(pairingRemainingSec / 60)}:{(pairingRemainingSec % 60).toString().padStart(2, '0')}</Text>
             </View>
           </View>
 
-          {useBlePairing && (
-            <View style={styles.bleInfoBanner}>
-              <Ionicons name="flash" size={16} color="#0F766E" />
-              <Text style={styles.bleInfoText}>
-                Fast pairing: the app finds the plug over BLE and provisions WiFi in one step.
+          {pairingStage === 'instruction' && (
+            <View style={styles.pairingSection}>
+              <Text style={[styles.pairingBodyText, { color: isDark ? '#CBD5E1' : '#475569' }]}> 
+                Press and hold the device button for 5 seconds until the LED indicator blinks twice,
+                stays on for 1 second, and repeats.
               </Text>
+              <TouchableOpacity
+                style={[styles.pairingActionButton, pairingBusy && { opacity: 0.7 }]}
+                onPress={() => {
+                  scanNearbyPlugs();
+                }}
+                disabled={pairingBusy}
+              >
+                <Ionicons name="search" size={18} color="#fff" />
+                <Text style={styles.pairingActionText}>Scan Devices Nearby</Text>
+              </TouchableOpacity>
             </View>
           )}
 
-          <View style={styles.inputContainer}>
-            <Text style={[styles.inputLabel, { color: isDark ? '#aaa' : '#666' }]}>
-              WiFi Network Name (SSID)
-            </Text>
-            <View style={[styles.inputWrapper, { backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5' }]}>
-              <Ionicons name="wifi-outline" size={20} color={isDark ? '#888' : '#666'} />
-              <TextInput
-                style={[styles.textInput, { color: isDark ? '#fff' : '#333' }]}
-                placeholder="Your WiFi network name"
-                placeholderTextColor={isDark ? '#555' : '#999'}
-                value={provisionSsid}
-                onChangeText={setProvisionSsid}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {autoSsid && autoSsid === provisionSsid && (
-                <View style={styles.autoSsidBadge}>
-                  <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
-                  <Text style={styles.autoSsidBadgeText}>Auto-detected</Text>
+          {(pairingStage === 'scanning' || pairingStage === 'connect' || pairingStage === 'wifi_scan') && (
+            <View style={styles.pairingSection}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+              <Text style={[styles.pairingBodyText, { color: isDark ? '#CBD5E1' : '#475569', marginTop: 12 }]}>
+                {pairingProgressText || 'Scanning devices nearby...'}
+              </Text>
+              {nearbyPlugs.length > 0 && (
+                <View style={styles.plugList}>
+                  {nearbyPlugs.slice(0, 3).map(plug => (
+                    <TouchableOpacity
+                      key={plug.id}
+                      style={[
+                        styles.plugListItem,
+                        selectedPlug?.id === plug.id && styles.plugListItemActive,
+                      ]}
+                      onPress={() => {
+                        setSelectedPlug(plug);
+                        connectPlugAndLoadWifi(plug);
+                      }}
+                      disabled={pairingBusy}
+                    >
+                      <View>
+                        <Text style={styles.plugName}>{plug.name}</Text>
+                        <Text style={styles.plugMeta}>{plug.serialNumber} | RSSI {plug.rssi}</Text>
+                      </View>
+                      <Text style={styles.plugConnectText}>Connect</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               )}
             </View>
-          </View>
+          )}
 
-          <View style={styles.inputContainer}>
-            <Text style={[styles.inputLabel, { color: isDark ? '#aaa' : '#666' }]}>
-              WiFi Password
-            </Text>
-            <View style={[styles.inputWrapper, { backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5' }]}>
-              <Ionicons name="lock-closed-outline" size={20} color={isDark ? '#888' : '#666'} />
+          {pairingStage === 'network' && (
+            <View style={styles.pairingSection}>
+              <Text style={[styles.pairingBodyText, { color: isDark ? '#CBD5E1' : '#475569' }]}>Select Wi-Fi (2.4GHz recommended)</Text>
+              {manualWifiMode && (
+                <View style={styles.manualModeBanner}>
+                  <Ionicons name="construct-outline" size={14} color="#7C3AED" />
+                  <Text style={styles.manualModeText}>
+                    {manualWifiReason === 'firmware_not_supported'
+                      ? 'Manual Wi-Fi mode (firmware limitation)'
+                      : 'Manual Wi-Fi mode'}
+                  </Text>
+                </View>
+              )}
+              {wifiNetworks.length === 0 && (
+                <Text style={[styles.manualHintText, { color: isDark ? '#94A3B8' : '#64748B' }]}>No networks listed. You can still type your SSID manually.</Text>
+              )}
+              {!manualWifiMode && wifiNetworks.length > 0 && (
+                <ScrollView style={styles.networkList} showsVerticalScrollIndicator={false}>
+                  {wifiNetworks.slice(0, 8).map(net => {
+                    const selected = wifiSsid === net.ssid;
+                    return (
+                      <TouchableOpacity
+                        key={`${net.ssid}-${net.rssi}`}
+                        style={[styles.networkRow, selected && styles.networkRowActive]}
+                        onPress={() => setWifiSsid(net.ssid)}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.networkName}>{net.ssid}</Text>
+                          <Text style={styles.networkMeta}>{net.band} | RSSI {net.rssi}</Text>
+                        </View>
+                        {net.band === '2.4GHz' && <Text style={styles.recommendedChip}>2.4GHz</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+
               <TextInput
-                style={[styles.textInput, { color: isDark ? '#fff' : '#333' }]}
-                placeholder="Your WiFi password"
-                placeholderTextColor={isDark ? '#555' : '#999'}
-                value={provisionPassword}
-                onChangeText={setProvisionPassword}
-                secureTextEntry
+                style={[styles.pairingInput, { color: isDark ? '#fff' : '#111', borderColor: isDark ? '#334155' : '#E2E8F0' }]}
+                placeholder="Wi-Fi Account (SSID)"
+                placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                value={wifiSsid}
+                onChangeText={setWifiSsid}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-            </View>
-          </View>
 
-          {(provisionError || bleError) && (
-            <View style={styles.provisionError}>
+              <View style={[styles.passwordRow, { borderColor: isDark ? '#334155' : '#E2E8F0' }]}> 
+                <TextInput
+                  style={[styles.passwordInputText, { color: isDark ? '#fff' : '#111' }]}
+                  placeholder="Wi-Fi Password"
+                  placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                  value={wifiPassword}
+                  onChangeText={setWifiPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  secureTextEntry={!showWifiPassword}
+                />
+                <TouchableOpacity onPress={() => setShowWifiPassword(prev => !prev)}>
+                  <Text style={styles.showHideText}>{showWifiPassword ? 'Hide' : 'Show'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.pairingActionButton, pairingBusy && { opacity: 0.7 }]}
+                onPress={submitWifiProvisioning}
+                disabled={pairingBusy}
+              >
+                <Ionicons name="paper-plane-outline" size={18} color="#fff" />
+                <Text style={styles.pairingActionText}>Connect Plug</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {pairingStage === 'provisioning' && (
+            <View style={[styles.pairingSection, { alignItems: 'center' }]}>
+              <View style={styles.circleProgressOuter}>
+                <View style={styles.circleProgressInner}>
+                  <ActivityIndicator size="large" color={Colors.primary} />
+                </View>
+              </View>
+              <Text style={[styles.pairingBodyText, { color: isDark ? '#CBD5E1' : '#475569', marginTop: 14, textAlign: 'center' }]}> 
+                {pairingProgressText || 'Connecting your plug...'}
+              </Text>
+            </View>
+          )}
+
+          {pairingStage === 'success' && (
+            <View style={[styles.pairingSection, { alignItems: 'center' }]}>
+              <View style={styles.successBubble}><Ionicons name="checkmark" size={26} color="#fff" /></View>
+              <Text style={[styles.successTitle, { color: isDark ? '#fff' : '#111827' }]}>Plug connected successfully</Text>
+              <Text style={[styles.pairingBodyText, { color: isDark ? '#CBD5E1' : '#475569', textAlign: 'center' }]}> 
+                Continue with room assignment and device naming.
+              </Text>
+              <TouchableOpacity
+                style={styles.pairingActionButton}
+                onPress={() => {
+                  setPairingStage(null);
+                  setStep(3);
+                }}
+              >
+                <Ionicons name="arrow-forward" size={18} color="#fff" />
+                <Text style={styles.pairingActionText}>Continue Setup</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {!!pairingError && (
+            <View style={styles.pairingErrorBox}>
               <Ionicons name="alert-circle" size={16} color={Colors.error} />
-              <Text style={styles.provisionErrorText}>{provisionError || bleError}</Text>
+              <Text style={styles.pairingErrorText}>{pairingError}</Text>
             </View>
           )}
 
-          {!!bleProgressMessage && (
-            <View style={styles.provisionProgress}>
-              <ActivityIndicator size="small" color={Colors.primary} />
-              <Text style={styles.provisionProgressText}>{bleProgressMessage}</Text>
+          {__DEV__ && (
+            <View style={[styles.debugPanel, { backgroundColor: isDark ? '#0F172A' : '#EEF2FF' }]}>
+              <Text style={styles.debugTitle}>Debug (dev only)</Text>
+              <Text style={styles.debugLine}>Stage: {pairingStage}</Text>
+              <Text style={styles.debugLine}>Cloud path: {cloudConfirmPath}</Text>
+              {!!cloudConfirmError && <Text style={styles.debugLine}>Cloud error: {cloudConfirmError}</Text>}
+              {(() => {
+                const snap = bleProvisioningService.getDebugSnapshot();
+                return (
+                  <>
+                    <Text style={styles.debugLine}>WiFi payload: {snap.lastWifiScan?.payloadShape || 'n/a'}</Text>
+                    <Text style={styles.debugLine}>WiFi list count: {snap.lastWifiScan?.networkCount ?? 0}</Text>
+                    <Text style={styles.debugLine}>WiFi msgId: {snap.lastWifiScan?.msgId || 'n/a'}</Text>
+                    <Text style={styles.debugLine}>Manual WiFi mode: {String(manualWifiMode)}</Text>
+                    <Text style={styles.debugLine}>ACK received: {String(snap.lastProvision?.ackReceived ?? false)}</Text>
+                    <Text style={styles.debugLine}>ACK attempts: {snap.lastProvision?.ackAttempts ?? 0}</Text>
+                    <Text style={styles.debugLine}>Provision msgId: {snap.lastProvision?.msgId || 'n/a'}</Text>
+                    {!!snap.lastWifiScan?.error && <Text style={styles.debugLine}>WiFi error: {snap.lastWifiScan.error}</Text>}
+                    {!!snap.lastProvision?.error && <Text style={styles.debugLine}>ACK error: {snap.lastProvision.error}</Text>}
+                  </>
+                );
+              })()}
             </View>
           )}
-
-          <TouchableOpacity
-            style={[
-              styles.provisionSubmitButton,
-              {
-                backgroundColor: (provisionSsid.trim() && provisionPassword.trim()) ? Colors.success : '#888',
-                opacity: (provisionSending || bleScanning || bleProvisioning) ? 0.7 : 1,
-              },
-            ]}
-            onPress={handleProvisionWifi}
-            disabled={!provisionSsid.trim() || !provisionPassword.trim() || provisionSending || bleScanning || bleProvisioning}
-          >
-            {(provisionSending || bleScanning || bleProvisioning) ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <>
-                <Ionicons name="send" size={18} color="#fff" />
-                <Text style={styles.provisionSubmitButtonText}>
-                  {useBlePairing ? 'Start Bluetooth Pairing' : 'Send WiFi Credentials'}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          <Text style={[styles.provisionHint, { color: isDark ? '#555' : '#999' }]}> 
-            {useBlePairing
-              ? 'Keep the plug near your phone and in pairing mode (LED blinking quickly).'
-              : 'Make sure the device is powered on and in setup mode'}
-          </Text>
         </View>
       )}
 
       {/* Visual pattern decoration */}
-      {!showProvisionForm && !scanningQR && (
+      {!scanningQR && !pairingStage && (
         <View style={styles.patternContainer}>
           <LinearGradient
             colors={DEVICE_TYPES.find(t => t.type === selectedType)?.gradient || ['#4CAF50', '#2E7D32']}
@@ -1074,7 +1419,7 @@ const AddDeviceModal = ({
               />
             </TouchableOpacity>
             
-            <View style={styles.stepIndicator}>
+          <View style={styles.stepIndicator}>
               {[1, 2, 3, 4].map((s) => (
                 <View
                   key={s}
@@ -1110,6 +1455,7 @@ const AddDeviceModal = ({
               style={[
                 styles.nextButton,
                 {
+                  opacity: pairingStage ? 0.5 : 1,
                   backgroundColor: (
                     (step === 1 && selectedType) ||
                     (step === 2 && serialNumber.trim()) ||
@@ -1119,7 +1465,7 @@ const AddDeviceModal = ({
                 },
               ]}
               onPress={handleNext}
-              disabled={loading || (
+              disabled={!!pairingStage || loading || (
                 (step === 1 && !selectedType) ||
                 (step === 2 && !serialNumber.trim()) ||
                 (step === 4 && !deviceName.trim())
@@ -2743,109 +3089,244 @@ const styles = StyleSheet.create({
   wifiProvisionButtonTextContainer: {
     flex: 1,
   },
-  qrButton: {
-    padding: 8,
-    marginRight: 4,
+  pairingCard: {
+    marginTop: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(91,110,245,0.18)',
+    padding: 14,
   },
-  autoSsidBadge: {
+  pairingHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  pairingTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  timeoutBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingRight: 8,
+    backgroundColor: 'rgba(91,110,245,0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  autoSsidBadgeText: {
-    color: Colors.success,
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  provisionForm: {
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 16,
-  },
-provisionFormHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    marginBottom: 16,
-  },
-  provisionFormHeaderText: {
-    flex: 1,
-  },
-  provisionFormTitle: {
-    fontSize: 16,
+  timeoutText: {
+    color: '#5B6EF5',
+    fontSize: 12,
     fontWeight: '600',
   },
-  provisionFormSubtext: {
-    fontSize: 12,
-    marginTop: 2,
+  pairingSection: {
+    marginTop: 8,
   },
-  provisionSubmitButton: {
-    flexDirection: 'row',
+  pairingBodyText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  pairingActionButton: {
+    marginTop: 14,
+    backgroundColor: '#5B6EF5',
+    borderRadius: 12,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    borderRadius: 16,
-    marginTop: 8,
+    flexDirection: 'row',
     gap: 8,
   },
-  provisionSubmitButtonText: {
+  pairingActionText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
-  provisionError: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    marginBottom: 12,
-  },
-  provisionErrorText: {
-    color: Colors.error,
-    fontSize: 14,
-    flex: 1,
-  },
-  provisionHint: {
-    fontSize: 12,
-    textAlign: 'center',
+  plugList: {
     marginTop: 12,
   },
-  bleInfoBanner: {
+  plugListItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(91,110,245,0.22)',
+    backgroundColor: '#fff',
+    padding: 12,
+    marginBottom: 8,
+  },
+  plugListItemActive: {
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(91,110,245,0.08)',
+  },
+  plugName: {
+    color: '#1F2937',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  plugMeta: {
+    marginTop: 2,
+    color: '#64748B',
+    fontSize: 12,
+  },
+  plugConnectText: {
+    color: Colors.primary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  networkList: {
+    maxHeight: 180,
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  manualHintText: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  manualModeBanner: {
+    marginTop: 8,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(124,58,237,0.12)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(15, 118, 110, 0.12)',
+    gap: 6,
+  },
+  manualModeText: {
+    color: '#6D28D9',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  networkRow: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 10,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  networkRowActive: {
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(91,110,245,0.08)',
+  },
+  networkName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  networkMeta: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  recommendedChip: {
+    fontSize: 11,
+    color: '#0F766E',
+    fontWeight: '700',
+  },
+  pairingInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  passwordRow: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  passwordInputText: {
+    flex: 1,
+    fontSize: 14,
+  },
+  showHideText: {
+    color: Colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  circleProgressOuter: {
+    width: 118,
+    height: 118,
+    borderRadius: 59,
+    borderWidth: 8,
+    borderColor: 'rgba(91,110,245,0.20)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  circleProgressInner: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successBubble: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.success,
+  },
+  successTitle: {
+    marginTop: 10,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  pairingErrorBox: {
+    marginTop: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(239,68,68,0.10)',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pairingErrorText: {
+    color: Colors.error,
+    fontSize: 12,
+    flex: 1,
+  },
+  debugPanel: {
+    marginTop: 12,
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(91,110,245,0.35)',
   },
-  bleInfoText: {
-    flex: 1,
-    color: '#0F766E',
+  debugTitle: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '700',
+    color: '#1E3A8A',
+    marginBottom: 4,
   },
-  provisionProgress: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 8,
+  debugLine: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: '#334155',
   },
-  provisionProgressText: {
-    color: Colors.primary,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 8,
-    marginLeft: 4,
+  qrButton: {
+    padding: 8,
+    marginRight: 4,
   },
 });

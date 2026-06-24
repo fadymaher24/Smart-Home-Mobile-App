@@ -30,9 +30,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">21.15% </span>
+                <span class="strong">20.37% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>11/52</span>
+                <span class='fraction'>11/54</span>
             </div>
         
             
@@ -403,7 +403,8 @@
 <a name='L338'></a><a href='#L338'>338</a>
 <a name='L339'></a><a href='#L339'>339</a>
 <a name='L340'></a><a href='#L340'>340</a>
-<a name='L341'></a><a href='#L341'>341</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L341'></a><a href='#L341'>341</a>
+<a name='L342'></a><a href='#L342'>342</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -728,6 +729,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">23x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -913,15 +915,15 @@ export function useWifiScan(): UseWifiScanReturn {
         const match = <span class="cstat-no" title="statement not covered" >network.SSID?.match(DEVICE_SSID_PATTERN);</span>
 <span class="cstat-no" title="statement not covered" >        if (match) {</span>
 <span class="cstat-no" title="statement not covered" >          smartDevices.push({</span>
-            ssid: network.SSID,
-            deviceType: match[1],
-            serialSuffix: match[2],
-            signalStrength: network.level || -50,
+            id: network.BSSID || network.SSID,
+            name: network.SSID,
+            serialNumber: `${match[1]}-${match[2]}`,
+            rssi: network.level || -50,
           });
         }
       }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >      smartDevices.sort(<span class="fstat-no" title="function not covered" >(a</span>, b) =&gt; <span class="cstat-no" title="statement not covered" >b.signalStrength - a.signalStrength)</span>;</span>
+<span class="cstat-no" title="statement not covered" >      smartDevices.sort(<span class="fstat-no" title="function not covered" >(a</span>, b) =&gt; <span class="cstat-no" title="statement not covered" >b.rssi - a.rssi)</span>;</span>
 <span class="cstat-no" title="statement not covered" >      setDevices(smartDevices);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >      if (smartDevices.length === 0) {</span>
@@ -958,7 +960,7 @@ export function useWifiScan(): UseWifiScanReturn {
 <span class="cstat-no" title="statement not covered" >        throw new Error('WiFi module not available');</span>
       }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >      await WifiApi.connectToProtectedSSID(device.ssid, DEVICE_AP_PASSWORD, false);</span>
+<span class="cstat-no" title="statement not covered" >      await WifiApi.connectToProtectedSSID(device.name, DEVICE_AP_PASSWORD, false);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >      await new Promise(<span class="fstat-no" title="function not covered" >re</span>solve =&gt; <span class="cstat-no" title="statement not covered" >setTimeout(resolve, 2000))</span>;</span>
 &nbsp;
@@ -986,7 +988,7 @@ export function useWifiScan(): UseWifiScanReturn {
 <span class="cstat-no" title="statement not covered" >      try {</span>
         const savedNetworks = <span class="cstat-no" title="statement not covered" >require('react-native-wifi-reimagined')?.default;</span>
 <span class="cstat-no" title="statement not covered" >        if (savedNetworks?.disconnectFromSSID) {</span>
-<span class="cstat-no" title="statement not covered" >          await savedNetworks.disconnectFromSSID(device.ssid);</span>
+<span class="cstat-no" title="statement not covered" >          await savedNetworks.disconnectFromSSID(device.name);</span>
         }
       } catch {}
 &nbsp;
@@ -1060,10 +1062,10 @@ export function useWifiScan(): UseWifiScanReturn {
     }
 &nbsp;
     return {
-      ssid,
-      deviceType: match[1],
-      serialSuffix: match[2],
-      signalStrength: -50,
+      id: ssid,
+      name: ssid,
+      serialNumber: `${match[1]}-${match[2]}`,
+      rssi: -50,
     };
   };
 &nbsp;
@@ -1083,14 +1085,15 @@ export function useWifiScan(): UseWifiScanReturn {
   };
 }
 &nbsp;
-export default useWifiScan;</pre></td></tr></table></pre>
+export default useWifiScan;
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-04-18T14:11:49.123Z
+                at 2026-06-24T20:47:58.844Z
             </div>
         <script src="prettify.js"></script>
         <script>
