@@ -25,17 +25,16 @@
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.BLUETOOTH",
-        "android.permission.BLUETOOTH_ADMIN",
-        "android.permission.BLUETOOTH_SCAN",
-        "android.permission.BLUETOOTH_CONNECT",
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "package": "com.anonymous.smartera"
     },
     "extra": {
-      "apiUrl": "http://localhost:3000/api"
+      "apiUrl": "http://localhost:3001/api",
+      "router": {},
+      "eas": {
+        "projectId": "3607ec62-7d2e-40c1-84fc-20430c0872d7"
+      }
     },
     "web": {
       "bundler": "metro",

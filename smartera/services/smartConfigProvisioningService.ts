@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 
 /**
  * SmartConfig (ESP-Touch / EZ-mode) provisioning service.
@@ -152,7 +152,15 @@ class SmartConfigProvisioningService {
   private isRunning = false;
 
   isSupported(): boolean {
-    return Platform.OS !== 'web';
+    if (Platform.OS === 'web') return false;
+    if (!NativeModules.UdpSockets) return false;
+    try {
+      const udp = getUdpModule();
+      const createSocket = udp?.createSocket || udp?.default?.createSocket;
+      return typeof createSocket === 'function';
+    } catch {
+      return false;
+    }
   }
 
   async start(input: SmartConfigInput): Promise<SmartConfigResult> {
@@ -161,7 +169,7 @@ class SmartConfigProvisioningService {
         success: false,
         packetsSent: 0,
         durationMs: 0,
-        error: 'SmartConfig is not supported on web. Use BLE or SoftAP provisioning.',
+        error: 'SmartConfig/EZ mode is not supported on this platform, or the react-native-udp native module has not been built/linked into the app binary.',
       };
     }
 
@@ -176,7 +184,17 @@ class SmartConfigProvisioningService {
 
     this.stop();
 
-    const { createSocket } = getUdpModule();
+    const udp = getUdpModule();
+    const createSocket = udp?.createSocket || udp?.default?.createSocket;
+    if (typeof createSocket !== 'function') {
+      return {
+        success: false,
+        packetsSent: 0,
+        durationMs: 0,
+        error: 'SmartConfig requires react-native-udp module but createSocket is not available.',
+      };
+    }
+
     this.socket = createSocket({ type: 'udp4' }) as UdpSocket;
     this.isRunning = true;
 

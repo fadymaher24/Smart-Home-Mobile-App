@@ -1,4 +1,4 @@
-import { PermissionsAndroid, Platform } from 'react-native';
+import { PermissionsAndroid, Platform, NativeModules } from 'react-native';
 
 export interface BleDiscoveredPlug {
   id: string;
@@ -203,7 +203,13 @@ const getBleManager = (): BleManagerLike => {
   }
 
   const { BleManager } = getBleLibrary();
-  bleManagerInstance = new BleManager() as BleManagerLike;
+  try {
+    bleManagerInstance = new BleManager() as BleManagerLike;
+  } catch {
+    throw new Error(
+      'Failed to initialize Bluetooth manager. Ensure BLE hardware is available and the native module is linked in your app build.'
+    );
+  }
   return bleManagerInstance;
 };
 
@@ -375,7 +381,8 @@ class BleProvisioningService {
   }
 
   isSupported(): boolean {
-    return Platform.OS !== 'web';
+    if (Platform.OS === 'web') return false;
+    return !!(NativeModules.BlePlx);
   }
 
   async discoverPlugs(targetSerial?: string): Promise<BleDiscoveredPlug[]> {

@@ -35,11 +35,23 @@ const resolveApiBaseUrl = (): string => {
     expoConfig?: { extra?: { apiUrl?: string } };
   };
 
-  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
-  if (fromEnv) return fromEnv;
+  let apiUrl = process.env.EXPO_PUBLIC_API_URL || constants.expoConfig?.extra?.apiUrl || '';
 
-  const fromExpoExtra = constants.expoConfig?.extra?.apiUrl;
-  if (fromExpoExtra) return fromExpoExtra;
+  if (apiUrl) {
+    // If the API URL points to localhost/127.0.0.1 in development,
+    // replace it with the host's actual IP so physical devices and emulators can reach the backend.
+    if (__DEV__ && (apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1'))) {
+      const hostUri =
+        constants.expoConfig?.hostUri ??
+        constants.manifest2?.extra?.expoClient?.hostUri ??
+        constants.manifest?.debuggerHost;
+      const host = hostUri ? extractHost(hostUri) : null;
+      if (host) {
+        apiUrl = apiUrl.replace('localhost', host).replace('127.0.0.1', host);
+      }
+    }
+    return apiUrl;
+  }
 
   if (__DEV__) return resolveLocalApiBaseUrl();
 
