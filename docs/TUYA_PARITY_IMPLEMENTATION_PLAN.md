@@ -1105,6 +1105,11 @@ Exit criteria:
 
 Objective: replace hardcoded/ad hoc settings with a typed, versioned contract.
 
+Started implementation (2026-08-29): a schema-v1 desired/reported shadow is
+persisted and exposed through owner-scoped APIs. Desired settings are published
+to the versioned MQTT topic and intentionally remain pending until firmware
+implements the matching apply/reported-ack protocol.
+
 Work packages:
 
 - `ARCH-201`: Define smart-plug schema v1 and compatibility semantics.
