@@ -44,7 +44,7 @@ const UsageItem = ({
   const theme = isDark ? Colors.dark : Colors.light;
   const iconName = DEVICE_ICONS[device.type] || DEVICE_ICONS['DEFAULT'];
   const power = device.lastTelemetry?.power || 0;
-  const energy = device.lastTelemetry?.energyTotal || device.lastTelemetry?.energy || 0;
+  const energy = device.lastTelemetry?.energyTotal ?? device.lastTelemetry?.energy ?? 0;
   const isOnline = device.isOnline;
   const isOn = device.powerState;
   const percentage = maxPower > 0 ? Math.min((power / maxPower) * 100, 100) : 0;
@@ -109,7 +109,7 @@ const UsageItem = ({
               {power.toFixed(1)} W
             </Text>
             <Text style={[styles.energyValue, { color: theme.textTertiary }]}>
-              {energy > 0 ? `${(energy / 1000).toFixed(2)} kWh` : '-'}
+              {energy > 0 ? `${energy.toFixed(2)} kWh` : '-'}
             </Text>
           </View>
         </View>
@@ -229,7 +229,7 @@ export default function PowerUsage() {
       .map(device => ({
         ...device,
         power: device.lastTelemetry?.power || 0,
-        energy: device.lastTelemetry?.energyTotal || device.lastTelemetry?.energy || 0,
+        energy: device.lastTelemetry?.energyTotal ?? device.lastTelemetry?.energy ?? 0,
       }))
       .sort((a, b) => b.power - a.power);
   }, [devices]);
@@ -263,15 +263,12 @@ export default function PowerUsage() {
     // Calculate daily average (last 7 days)
     const dailyAverage = weeklyUsage > 0 ? weeklyUsage / 7 : todayUsage;
     
-    // Peak usage estimate (1.5x average for now - in real app, get from backend)
-    const peakUsage = Math.max(currentPower, dailyAverage * 1.5);
-    
     return {
-      todayUsage: todayUsage / 1000, // Convert to kWh
-      weeklyUsage: weeklyUsage / 1000,
-      monthlyUsage: monthlyUsage / 1000,
-      dailyAverage: dailyAverage / 1000,
-      peakUsage,
+      todayUsage,
+      weeklyUsage,
+      monthlyUsage,
+      dailyAverage,
+      currentPower,
     };
   }, [powerStats, currentPower]);
 
@@ -451,8 +448,8 @@ export default function PowerUsage() {
           <StatCard
             icon="alert-triangle"
             iconColor={Colors.warning}
-            title="Peak"
-            value={`${energyStats.peakUsage.toFixed(0)} W`}
+            title="Current"
+            value={`${energyStats.currentPower.toFixed(0)} W`}
             isDark={isDark}
           />
         </View>

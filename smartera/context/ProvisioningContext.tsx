@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useReducer, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 export type ProvisioningPhase =
   | 'idle'
@@ -96,6 +97,7 @@ const initialState: ProvisioningState = {
 };
 
 const STORAGE_KEY = '@provisioning_session';
+const TOKEN_KEY = 'smartera.provisioningToken';
 const GLOBAL_TIMEOUT_MS = 180 * 1000;
 
 function provisioningReducer(state: ProvisioningState, action: ProvisioningAction): ProvisioningState {
@@ -203,13 +205,15 @@ export function ProvisioningProvider({ children }: { children: ReactNode }) {
       }
 
       const parsed = JSON.parse(saved) as ProvisioningState;
+      const token = await SecureStore.getItemAsync(TOKEN_KEY);
       const now = Date.now();
-      if (!parsed.deadlineAt || now > parsed.deadlineAt) {
+      if (!token || !parsed.deadlineAt || now > parsed.deadlineAt) {
         await AsyncStorage.removeItem(STORAGE_KEY);
+        await SecureStore.deleteItemAsync(TOKEN_KEY);
         return;
       }
 
-      dispatch({ type: 'RESTORE', payload: parsed });
+      dispatch({ type: 'RESTORE', payload: { ...parsed, token } });
     } catch (error) {
       console.error('Failed to restore provisioning state:', error);
     }
@@ -217,13 +221,19 @@ export function ProvisioningProvider({ children }: { children: ReactNode }) {
 
   const saveState = async (nextState: ProvisioningState) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+      await AsyncStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ ...nextState, token: null })
+      );
     } catch (error) {
       console.error('Failed to save provisioning state:', error);
     }
   };
 
   const startSession = (sessionId: string, token: string) => {
+    void SecureStore.setItemAsync(TOKEN_KEY, token, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
     dispatch({ type: 'START_SESSION', payload: { sessionId, token } });
   };
 
@@ -258,6 +268,7 @@ export function ProvisioningProvider({ children }: { children: ReactNode }) {
   const reset = async () => {
     dispatch({ type: 'RESET' });
     await AsyncStorage.removeItem(STORAGE_KEY);
+    await SecureStore.deleteItemAsync(TOKEN_KEY);
   };
 
   return (

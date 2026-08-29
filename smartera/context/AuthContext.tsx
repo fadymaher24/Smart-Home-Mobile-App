@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_BASE_URL, ApiError } from '../utils/api';
+import * as SecureStore from 'expo-secure-store';
+import { API_BASE_URL } from '../utils/api';
+
+const ACCESS_TOKEN_KEY = 'smartera.accessToken';
 
 function parseErrorMessage(raw: string): string {
   try {
@@ -60,8 +63,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const loadStoredAuth = async () => {
     try {
-      const storedToken = await AsyncStorage.getItem("token");
+      const storedToken = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
       const storedUser = await AsyncStorage.getItem("user");
+      // Remove tokens written by older app versions; credentials now belong
+      // exclusively in the OS-backed secure store.
+      await AsyncStorage.removeItem("token");
 
       if (storedToken) {
         try {
@@ -71,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             setUser(userProfile);
             await AsyncStorage.setItem("user", JSON.stringify(userProfile));
           } else {
-            await AsyncStorage.removeItem("token");
+            await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
             await AsyncStorage.removeItem("user");
           }
         } catch {
@@ -87,7 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-const login = async (email: string, password: string): Promise<void> => {
+  const login = async (email: string, password: string): Promise<void> => {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
@@ -98,13 +104,18 @@ const login = async (email: string, password: string): Promise<void> => {
       if (response.ok) {
         const data = await response.json();
         setToken(data.token);
-        await AsyncStorage.setItem("token", data.token);
+        await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, data.token, {
+          keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+        });
+        await AsyncStorage.removeItem("token");
 
         let userProfile = data.user || null;
         if (!userProfile && data.token) {
           try {
             userProfile = await fetchUserProfile(data.token);
-          } catch {}
+          } catch (error) {
+            console.warn('Could not load the user profile after login:', error);
+          }
         }
 
         if (userProfile) {
@@ -168,6 +179,7 @@ const login = async (email: string, password: string): Promise<void> => {
   const logout = async () => {
     setToken(null);
     setUser(null);
+    await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
     await AsyncStorage.removeItem("token");
     await AsyncStorage.removeItem("user");
   };

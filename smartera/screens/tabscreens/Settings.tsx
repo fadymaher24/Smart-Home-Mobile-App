@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import "react-native-gesture-handler";
 import {
   StyleSheet,
@@ -96,9 +96,6 @@ export default function Settings() {
   const isDark = theme === "dark";
   const themeColors = isDark ? Colors.dark : Colors.light;
   
-  const [notifications, setNotifications] = useState(true);
-  const [locationServices, setLocationServices] = useState(true);
-
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       { text: "Cancel", style: "cancel" },
@@ -126,9 +123,6 @@ export default function Settings() {
             <Text style={styles.profileName}>{user?.name || 'User'}</Text>
             <Text style={styles.profileEmail}>{user?.email || 'user@example.com'}</Text>
           </View>
-          <TouchableOpacity style={styles.editButton}>
-            <Feather name="edit-2" size={18} color="rgba(255,255,255,0.8)" />
-          </TouchableOpacity>
         </View>
       </LinearGradient>
 
@@ -143,112 +137,12 @@ export default function Settings() {
           </Text>
           <View style={[styles.sectionCard, { backgroundColor: themeColors.surface }]}>
             <SettingItem
-              icon="bell"
-              title="Notifications"
-              subtitle="Push and in-app alerts"
-              value={notifications}
-              onValueChange={setNotifications}
-              hasSwitch
-              isDark={isDark}
-            />
-            <View style={[styles.divider, { backgroundColor: themeColors.border }]} />
-            <SettingItem
               icon="moon"
               title="Dark Mode"
               subtitle="Switch between light and dark"
               value={isDarkMode}
               onValueChange={toggleTheme}
               hasSwitch
-              isDark={isDark}
-            />
-            <View style={[styles.divider, { backgroundColor: themeColors.border }]} />
-            <SettingItem
-              icon="map-pin"
-              title="Location Services"
-              subtitle="Enable for automation triggers"
-              value={locationServices}
-              onValueChange={setLocationServices}
-              hasSwitch
-              isDark={isDark}
-            />
-          </View>
-        </View>
-
-        {/* Account Section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Account
-          </Text>
-          <View style={[styles.sectionCard, { backgroundColor: themeColors.surface }]}>
-            <SettingItem
-              icon="user"
-              title="Profile"
-              subtitle="Manage your account"
-              onPress={() => {}}
-              isDark={isDark}
-            />
-            <View style={[styles.divider, { backgroundColor: themeColors.border }]} />
-            <SettingItem
-              icon="lock"
-              title="Privacy"
-              subtitle="Data and sharing preferences"
-              onPress={() => {}}
-              isDark={isDark}
-            />
-            <View style={[styles.divider, { backgroundColor: themeColors.border }]} />
-            <SettingItem
-              icon="shield"
-              title="Security"
-              subtitle="Password and authentication"
-              onPress={() => {}}
-              isDark={isDark}
-            />
-          </View>
-        </View>
-
-        {/* Devices Section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Devices
-          </Text>
-          <View style={[styles.sectionCard, { backgroundColor: themeColors.surface }]}>
-            <SettingItem
-              icon="wifi"
-              title="Connected Devices"
-              subtitle="Manage smart devices"
-              onPress={() => {}}
-              isDark={isDark}
-            />
-            <View style={[styles.divider, { backgroundColor: themeColors.border }]} />
-            <SettingItem
-              icon="home"
-              title="Rooms"
-              subtitle="Organize your spaces"
-              onPress={() => {}}
-              isDark={isDark}
-            />
-          </View>
-        </View>
-
-        {/* Support Section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Support
-          </Text>
-          <View style={[styles.sectionCard, { backgroundColor: themeColors.surface }]}>
-            <SettingItem
-              icon="help-circle"
-              title="Help Center"
-              subtitle="FAQ and guides"
-              onPress={() => {}}
-              isDark={isDark}
-            />
-            <View style={[styles.divider, { backgroundColor: themeColors.border }]} />
-            <SettingItem
-              icon="info"
-              title="About"
-              subtitle="Version and legal info"
-              onPress={() => {}}
               isDark={isDark}
             />
           </View>

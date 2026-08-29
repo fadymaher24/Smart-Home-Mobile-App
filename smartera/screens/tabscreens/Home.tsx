@@ -394,7 +394,7 @@ export default function Home() {
           <StatsCard
             icon="battery-charging"
             iconColor={Colors.power}
-            value={`${((powerStats?.todayUsage || 0) / 1000).toFixed(1)}`}
+            value={`${(powerStats?.todayUsage || 0).toFixed(1)}`}
             label="kWh Today"
             isDark={isDark}
           />

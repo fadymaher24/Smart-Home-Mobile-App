@@ -1,8 +1,15 @@
 // React hooks for device data and real-time updates
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import deviceService, { Device, DeviceTelemetry, PowerUsageStats } from '../services/deviceService';
 import realtimeService from '../services/realtimeService';
+
+function telemetryEnergyKwh(message: Partial<DeviceTelemetry>): number {
+  if (message.energyTotal != null) return message.energyTotal;
+  if (message.energyWh != null) return message.energyWh / 1000;
+  // Legacy backend websocket payloads used `energy` for a kWh value.
+  return message.energy ?? 0;
+}
 
 // Hook for managing devices list with real-time status updates
 export function useDevices() {
@@ -10,17 +17,20 @@ export function useDevices() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Track devices with pending control commands (ignore status updates briefly)
-  const pendingControlRef = useRef<Map<string | number, number>>(new Map());
 
   const loadDevices = useCallback(async () => {
-    if (!token) return;
+    if (!token) {
+      setDevices([]);
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
       setError(null);
       const deviceList = await deviceService.getDevices(token);
       setDevices(deviceList);
+      return deviceList;
     } catch (err: any) {
       console.error('Failed to load devices:', err);
       setError(err.message || 'Failed to load devices');
@@ -45,18 +55,12 @@ export function useDevices() {
 
     // Subscribe to device status updates
     const unsubscribeStatus = realtimeService.subscribe('device-status', (message) => {
-      // Check if device has pending command (within 2 seconds)
-      const pendingTime = pendingControlRef.current.get(message.deviceId) || 
-                          pendingControlRef.current.get(message.serialNumber);
-      const hasPending = pendingTime && Date.now() - pendingTime < 2000;
-      
       setDevices(prev => prev.map(device => 
         (device.id === message.deviceId || device.serialNumber === message.serialNumber)
           ? { 
               ...device, 
               isOnline: message.isOnline,
-              // Only update powerState if no pending command
-              powerState: hasPending ? device.powerState : (message.powerState ?? device.powerState),
+              powerState: message.powerState ?? device.powerState,
             }
           : device
       ));
@@ -64,11 +68,6 @@ export function useDevices() {
 
     // Subscribe to telemetry updates - this has the actual relay state
     const unsubscribeTelemetry = realtimeService.subscribe('telemetry', (message) => {
-      // Check if device has pending command (within 2 seconds)
-      const pendingTime = pendingControlRef.current.get(message.deviceId) || 
-                          pendingControlRef.current.get(message.serialNumber);
-      const hasPending = pendingTime && Date.now() - pendingTime < 2000;
-      
       setDevices(prev => prev.map(device => 
         (device.id === message.deviceId || device.serialNumber === message.serialNumber)
           ? { 
@@ -78,13 +77,13 @@ export function useDevices() {
                 power: message.power,
                 voltage: message.voltage,
                 current: message.current,
-                energyTotal: message.energyTotal || message.energy,
+                energyWh: message.energyWh,
+                energyTotal: telemetryEnergyKwh(message),
                 relay: message.relay,
               } as DeviceTelemetry,
-              // Update powerState from relay if present and no pending command
-              powerState: hasPending 
-                ? device.powerState 
-                : (message.relay !== undefined ? message.relay : device.powerState),
+              powerState: message.relay ?? device.powerState,
+              controlPending: false,
+              desiredPowerState: undefined,
             }
           : device
       ));
@@ -112,69 +111,34 @@ export function useDevices() {
   const controlDevice = useCallback(async (deviceId: string | number, action: 'turnOn' | 'turnOff') => {
     if (!token) return;
 
-    // Find the device first
-    const device = devices.find(d => d.id === deviceId || d.serialNumber === deviceId);
-    
-    // Optimistically update UI IMMEDIATELY (before API call)
     const expectedState = action === 'turnOn';
     setDevices(prev => prev.map(d =>
       (d.id === deviceId || d.serialNumber === deviceId)
-        ? { ...d, powerState: expectedState }
+        ? { ...d, controlPending: true, desiredPowerState: expectedState }
         : d
     ));
-    
-    // Mark device as having pending command (ignore conflicting status updates for 2 seconds)
-    const now = Date.now();
-    pendingControlRef.current.set(deviceId, now);
-    if (device) {
-      pendingControlRef.current.set(device.id, now);
-      pendingControlRef.current.set(device.serialNumber, now);
-    }
 
     try {
-      // Send command to server (don't block UI)
       await deviceService.controlDevice(deviceId, action, token);
-      
-      // Clear pending flag after 2 seconds to allow real telemetry through
+
+      // A publish acknowledgement is not a device acknowledgement. Stop showing
+      // pending after a bounded wait, but keep reported state unchanged.
       setTimeout(() => {
-        const storedTime = pendingControlRef.current.get(deviceId);
-        if (storedTime === now) {
-          pendingControlRef.current.delete(deviceId);
-          if (device) {
-            pendingControlRef.current.delete(device.id);
-            pendingControlRef.current.delete(device.serialNumber);
-          }
-        }
-      }, 2000);
+        setDevices(prev => prev.map(d =>
+          (d.id === deviceId || d.serialNumber === deviceId) && d.desiredPowerState === expectedState
+            ? { ...d, controlPending: false, desiredPowerState: undefined }
+            : d
+        ));
+      }, 10000);
       
       return true;
     } catch (err: any) {
-      // Revert optimistic update on error
       setDevices(prev => prev.map(d =>
         (d.id === deviceId || d.serialNumber === deviceId)
-          ? { ...d, powerState: !expectedState }
+          ? { ...d, controlPending: false, desiredPowerState: undefined }
           : d
       ));
-      // Clear pending flag on error
-      pendingControlRef.current.delete(deviceId);
-      if (device) {
-        pendingControlRef.current.delete(device.id);
-        pendingControlRef.current.delete(device.serialNumber);
-      }
       console.error('Failed to control device:', err);
-      throw err;
-    }
-  }, [token, devices]);
-
-  const addDevice = useCallback(async (deviceData: { serialNumber: string; name: string; type: string; roomId?: number }) => {
-    if (!token) return;
-
-    try {
-      const newDevice = await deviceService.addDevice(deviceData, token);
-      setDevices(prev => [...prev, newDevice]);
-      return newDevice;
-    } catch (err: any) {
-      console.error('Failed to add device:', err);
       throw err;
     }
   }, [token]);
@@ -218,7 +182,6 @@ export function useDevices() {
     error,
     refresh: loadDevices,
     controlDevice,
-    addDevice,
     removeDevice,
     updateDevice,
   };
@@ -317,9 +280,16 @@ export function useDevice(deviceId: string | number) {
           voltage: message.voltage,
           current: message.current,
           power: message.power,
-          energyTotal: message.energyTotal || message.energy,
+          energyWh: message.energyWh,
+          energyTotal: telemetryEnergyKwh(message),
           relay: message.relay,
         } as DeviceTelemetry);
+        setDevice(prev => prev ? {
+          ...prev,
+          powerState: message.relay ?? prev.powerState,
+          controlPending: false,
+          desiredPowerState: undefined,
+        } : null);
       }
     });
 
@@ -359,11 +329,29 @@ export function useDevice(deviceId: string | number) {
   const control = useCallback(async (action: 'turnOn' | 'turnOff') => {
     if (!token || !deviceId) return;
 
+    const expectedState = action === 'turnOn';
+    setDevice(prev => prev ? {
+      ...prev,
+      controlPending: true,
+      desiredPowerState: expectedState,
+    } : null);
+
     try {
       await deviceService.controlDevice(deviceId, action, token);
-      setDevice(prev => prev ? { ...prev, powerState: action === 'turnOn' } : null);
+      setTimeout(() => {
+        setDevice(prev => prev?.desiredPowerState === expectedState ? {
+          ...prev,
+          controlPending: false,
+          desiredPowerState: undefined,
+        } : prev);
+      }, 10000);
       return true;
     } catch (err: any) {
+      setDevice(prev => prev ? {
+        ...prev,
+        controlPending: false,
+        desiredPowerState: undefined,
+      } : null);
       console.error('Failed to control device:', err);
       throw err;
     }
@@ -422,7 +410,7 @@ export function usePowerUsage() {
       setStats(totalStats);
       setWeeklyData({
         labels: weekly.labels || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-        data: (weekly.dailyData || [0, 0, 0, 0, 0, 0, 0]).map((v: number) => v / 1000),
+        data: weekly.dailyData || [0, 0, 0, 0, 0, 0, 0],
       });
     } catch (err: any) {
       console.error('Failed to load power usage:', err);
@@ -445,19 +433,11 @@ export function usePowerUsage() {
   const loadMonthlyData = useCallback(async () => {
     if (!token) return;
     try {
-      const monthly = await deviceService.getWeeklyPowerUsage(token);
-      const dailyData = monthly.dailyData || [0, 0, 0, 0, 0, 0, 0];
-      const inKwh = dailyData.map((v: number) => v / 1000);
-      const weekLabels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-      const weekData = dailyData.length === 7
-        ? [
-            inKwh.slice(0, 2).reduce((a: number, b: number) => a + b, 0),
-            inKwh.slice(2, 4).reduce((a: number, b: number) => a + b, 0),
-            inKwh.slice(4, 6).reduce((a: number, b: number) => a + b, 0),
-            inKwh[6],
-          ]
-        : [0, 0, 0, 0];
-      setMonthlyData({ labels: weekLabels, data: weekData });
+      const monthly = await deviceService.getMonthlyPowerUsage(token);
+      setMonthlyData({
+        labels: monthly.weeklyData.map((_, index) => `Week ${index + 1}`),
+        data: monthly.weeklyData,
+      });
     } catch (err: any) {
       console.error('Failed to load monthly power data:', err);
     }

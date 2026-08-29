@@ -20,7 +20,6 @@ import { BlurView } from "expo-blur";
 import { useTheme } from "../../context/ThemeContext";
 import { Colors } from "../../utils/colors";
 import { useDevices, useRealtimeConnection, useRooms } from "../../hooks/useDeviceData";
-import { API_BASE_URL, ApiError } from "../../utils/api";
 import { Device as ServiceDevice } from "../../services/deviceService";
 import { useBleProvisioning } from "../../hooks/useBleProvisioning";
 import { MaterialCommunityIcons, Ionicons, Feather } from "@expo/vector-icons";
@@ -581,7 +580,7 @@ const DeviceDetailsModal = ({
                   <View style={[styles.telemetryCard, { backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5' }]}>
                     <Feather name="battery-charging" size={20} color={Colors.secondary} />
                     <Text style={[styles.telemetryValue, { color: isDark ? '#fff' : '#333' }]}>
-                      {(device.lastTelemetry.energy || device.lastTelemetry.energyTotal || 0).toFixed(2)}
+                      {(device.lastTelemetry.energyTotal ?? device.lastTelemetry.energy ?? 0).toFixed(2)}
                     </Text>
                     <Text style={[styles.telemetryUnit, { color: isDark ? '#888' : '#666' }]}>kWh</Text>
                   </View>
@@ -735,7 +734,6 @@ export default function DeviceActive() {
     error,
     refresh,
     controlDevice,
-    addDevice,
     removeDevice,
     updateDevice,
   } = useDevices();
@@ -760,23 +758,21 @@ export default function DeviceActive() {
   const handleAddDevice = async (data: { serialNumber: string; name: string; type: DeviceType; roomId?: number }) => {
     setAddingDevice(true);
     try {
-      await addDevice({
-        serialNumber: data.serialNumber,
+      const latestDevices = await refresh();
+      const claimedDevice = latestDevices?.find(
+        device => device.serialNumber === data.serialNumber
+      );
+      if (!claimedDevice) {
+        throw new Error('The device claim has not reached the cloud yet. Please try again.');
+      }
+      await updateDevice(claimedDevice.id, {
         name: data.name,
-        type: data.type,
-        roomId: data.roomId,
+        roomId: data.roomId ?? null,
       });
       setAddModalVisible(false);
       Alert.alert('Success', `${data.name} has been added successfully!`);
     } catch (err: any) {
-      if (err instanceof ApiError && err.status === 409) {
-        Alert.alert(
-          'Device already exists',
-          'This serial number is already registered. Long-press the existing device to edit its name or room.'
-        );
-      } else {
-        Alert.alert('Error', err.message || 'Failed to add device');
-      }
+      Alert.alert('Error', err.message || 'Failed to finish device setup');
     } finally {
       setAddingDevice(false);
     }

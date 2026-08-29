@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   DiscoveredDevice,
   ProvisioningPhase,
@@ -10,6 +9,8 @@ import bleProvisioningService from '../services/bleProvisioningService';
 import { API_BASE_URL } from '../utils/api';
 import realtimeService from '../services/realtimeService';
 import { createLogger } from '../utils/logger';
+import { useAuth } from '../context/AuthContext';
+import deviceService from '../services/deviceService';
 
 const CLOUD_VERIFY_TIMEOUT_MS = 60_000;
 const BLE_CONNECT_MAX_ATTEMPTS = 2;
@@ -42,11 +43,6 @@ interface UseProvisioningReturn {
   clearError: () => void;
 }
 
-const getAuthToken = async (): Promise<string> => {
-  const token = await AsyncStorage.getItem('token');
-  return token || '';
-};
-
 const toWifiOptions = (
   list: Array<{ ssid: string; rssi: number; band: '2.4GHz' | '5GHz' | 'unknown'; security?: string }>
 ): WifiNetworkOption[] => {
@@ -70,6 +66,7 @@ const toWifiOptions = (
 
 export function useProvisioning(): UseProvisioningReturn {
   const context = useProvisioningContext();
+  const { token: authToken } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(180);
@@ -79,7 +76,6 @@ export function useProvisioning(): UseProvisioningReturn {
     async (event: string, data: Record<string, unknown>) => {
       provisioningLogger.info(event, data);
       try {
-        const authToken = await getAuthToken();
         if (!authToken) {
           return;
         }
@@ -102,7 +98,7 @@ export function useProvisioning(): UseProvisioningReturn {
         // Telemetry endpoint is optional; local log is primary fallback.
       }
     },
-    [context.state.device?.serialNumber, context.state.sessionId]
+    [authToken, context.state.device?.serialNumber, context.state.sessionId]
   );
 
   useEffect(() => {
@@ -143,7 +139,9 @@ export function useProvisioning(): UseProvisioningReturn {
     setIsLoading(true);
     context.clearError();
     try {
-      const authToken = await getAuthToken();
+      if (!authToken) {
+        throw new Error('You must be signed in to add a device.');
+      }
       const response = await fetch(`${API_BASE_URL}/provisioning/session`, {
         method: 'POST',
         headers: {
@@ -170,7 +168,7 @@ export function useProvisioning(): UseProvisioningReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [context]);
+  }, [authToken, context]);
 
   const beginBleScan = useCallback(async () => {
     setIsDiscovering(true);
@@ -271,7 +269,9 @@ export function useProvisioning(): UseProvisioningReturn {
       throw new Error('No active provisioning session.');
     }
 
-    const authToken = await getAuthToken();
+    if (!authToken) {
+      throw new Error('You must be signed in to verify a device.');
+    }
     const startedAt = Date.now();
 
     while (Date.now() - startedAt < CLOUD_VERIFY_TIMEOUT_MS) {
@@ -293,10 +293,12 @@ export function useProvisioning(): UseProvisioningReturn {
     }
 
     throw new Error('Device did not finish cloud registration in time.');
-  }, [context]);
+  }, [authToken, context]);
 
   const subscribeCloudStatus = useCallback(async () => {
-    const authToken = await getAuthToken();
+    if (!authToken) {
+      return;
+    }
 
     try {
       await realtimeService.connect(authToken);
@@ -343,7 +345,7 @@ export function useProvisioning(): UseProvisioningReturn {
       unsubscribeStatus();
       realtimeService.disconnect();
     };
-  }, [context]);
+  }, [authToken, context]);
 
   const sendCredentials = useCallback(async (ssid: string, password: string) => {
     if (!context.state.device) {
@@ -391,9 +393,34 @@ export function useProvisioning(): UseProvisioningReturn {
   }, [context, subscribeCloudStatus, verifyCloud, emitTelemetry]);
 
   const finalizeSetup = useCallback(async (input: { deviceName: string; roomName: string }) => {
-    context.setMetadata({ deviceName: input.deviceName.trim(), roomName: input.roomName });
+    if (!authToken || !context.state.device?.serialNumber) {
+      throw new Error('The claimed device could not be identified. Restart setup.');
+    }
+
+    const devices = await deviceService.getDevices(authToken);
+    const claimedDevice = devices.find(
+      device => device.serialNumber === context.state.device?.serialNumber
+    );
+    if (!claimedDevice) {
+      throw new Error('The device has not finished registering with the cloud.');
+    }
+
+    const roomName = input.roomName.trim();
+    const rooms = await deviceService.getRooms(authToken);
+    let room = rooms.find(existing => existing.name.toLowerCase() === roomName.toLowerCase());
+    if (!room && roomName && roomName !== 'Other') {
+      room = await deviceService.createRoom({ name: roomName }, authToken);
+    }
+
+    const deviceName = input.deviceName.trim() || claimedDevice.name;
+    await deviceService.updateDevice(
+      claimedDevice.id,
+      { name: deviceName, roomId: room?.roomId ?? null },
+      authToken
+    );
+    context.setMetadata({ deviceName, roomName });
     context.setPhase('complete');
-  }, [context]);
+  }, [authToken, context]);
 
   const reset = useCallback(async () => {
     if (cloudWatcherRef.current) {

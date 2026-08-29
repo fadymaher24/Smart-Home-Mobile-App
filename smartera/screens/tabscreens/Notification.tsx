@@ -26,6 +26,11 @@ interface NotificationItemProps {
   onDelete: (id: string) => void;
 }
 
+const mapNotificationType = (type: string): "alert" | "success" | "info" => {
+  if (type === 'CRITICAL' || type === 'WARNING') return 'alert';
+  return 'info';
+};
+
 const NotificationItem = ({
   id,
   title,
@@ -137,7 +142,7 @@ export default function Notification() {
       console.log("Error loading from storage:", storageError);
     }
 
-    // Then try to load from backend (might fail, that's okay)
+    // Refresh the cache from the backend when online.
     if (token) {
       try {
         const backendNotifications = await apiRequest(
@@ -147,38 +152,21 @@ export default function Notification() {
           token
         );
         
-        if (backendNotifications && Array.isArray(backendNotifications)) {
-          const mapped = backendNotifications.map((notif: any) => ({
+        const notificationRows = backendNotifications?.notifications;
+        if (Array.isArray(notificationRows)) {
+          const mapped = notificationRows.map((notif: any) => ({
             id: notif._id || notif.id,
             title: notif.title,
             message: notif.message,
             time: new Date(notif.createdAt).toLocaleTimeString(),
-            type: notif.type || 'info',
+            type: mapNotificationType(notif.type),
           }));
           setNotifications(mapped);
           // Save to local storage for offline access
           await AsyncStorage.setItem("notifications", JSON.stringify(mapped));
         }
       } catch (error) {
-        // Backend failed - silently use local storage data
-        // Don't show error to user, just use cached notifications
         console.log("Backend notifications unavailable, using local cache");
-        
-        // If no local cache exists, set default notifications
-        const storedNotifications = await AsyncStorage.getItem("notifications");
-        if (!storedNotifications || JSON.parse(storedNotifications).length === 0) {
-          const defaultNotifications = [
-            {
-              id: "default-1",
-              title: "Welcome to Smartera",
-              message: "Start by adding your first smart device",
-              time: "Just now",
-              type: "info" as const,
-            },
-          ];
-          setNotifications(defaultNotifications);
-          await AsyncStorage.setItem("notifications", JSON.stringify(defaultNotifications));
-        }
       }
     }
   }, [token]);
@@ -194,7 +182,7 @@ export default function Notification() {
   }, [loadNotifications]);
 
   const handleDelete = async (id: string) => {
-    // Optimistically update UI first
+    const previousNotifications = notifications;
     const updatedNotifications = notifications.filter(
       (notification) => notification.id !== id
     );
@@ -210,13 +198,13 @@ export default function Notification() {
       console.log("Error saving to storage:", error);
     }
 
-    // Try to delete from backend (don't block UI or show errors)
-    if (token && !id.startsWith('default-')) {
+    if (token) {
       try {
         await apiRequest(`/notifications/${id}`, "DELETE", null, token);
       } catch (error) {
-        // Silently fail - notification is already removed from local storage
-        console.log("Backend delete failed (notification removed locally):", error);
+        setNotifications(previousNotifications);
+        await AsyncStorage.setItem("notifications", JSON.stringify(previousNotifications));
+        Alert.alert("Delete failed", "The notification could not be deleted. Please try again.");
       }
     }
   };
@@ -235,10 +223,14 @@ export default function Notification() {
           style: "destructive",
           onPress: async () => {
             try {
+              if (token) {
+                await apiRequest('/notifications/all', 'DELETE', null, token);
+              }
               await AsyncStorage.removeItem("notifications");
               setNotifications([]);
             } catch (error) {
               console.error("Error clearing notifications:", error);
+              Alert.alert("Clear failed", "Notifications were not cleared. Please try again.");
             }
           },
         },

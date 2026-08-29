@@ -4,6 +4,8 @@ import { I18nManager } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import i18n from '../services/i18n';
+import { ThemeProvider } from '../context/ThemeContext';
+import { AuthProvider } from '../context/AuthContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -32,10 +34,14 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="Welcome" />
-      <Stack.Screen name="provisioning" options={{ headerShown: false }} />
-    </Stack>
+    <ThemeProvider>
+      <AuthProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="Welcome" />
+          <Stack.Screen name="provisioning" options={{ headerShown: false }} />
+        </Stack>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

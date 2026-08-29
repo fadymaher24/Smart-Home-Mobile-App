@@ -15,7 +15,6 @@ import {
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import NetInfo from "@react-native-community/netinfo";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
 import { Colors, getThemeColors } from "../../utils/colors";
@@ -26,7 +25,6 @@ import bleProvisioningService, {
   BleDiscoveredPlug,
   BleWifiNetwork,
 } from "../../services/bleProvisioningService";
-import smartConfigProvisioningService from "../../services/smartConfigProvisioningService";
 import realtimeService from "../../services/realtimeService";
 import QRScan from "../tabscreens/QRScan";
 
@@ -120,22 +118,13 @@ type PairingStage =
   | "provisioning"
   | "success";
 
-type EzStage = "input" | "broadcasting" | "claiming" | "success" | "error";
-type ProvisioningMode = "ble" | "ez" | null;
+type ProvisioningMode = "ble" | null;
 type CloudConfirmPath = "none" | "realtime" | "polling";
 
 const formatCountdown = (seconds: number) => {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
-};
-
-const isSmartConfigSupported = (): boolean => {
-  try {
-    return smartConfigProvisioningService.isSupported();
-  } catch {
-    return false;
-  }
 };
 
 const SignalBars = ({ rssi }: { rssi: number }) => {
@@ -226,15 +215,6 @@ export default function AddDeviceModal({
   const [manualWifiMode, setManualWifiMode] = useState(false);
   const [manualWifiReason, setManualWifiReason] = useState<string | null>(null);
 
-  // EZ mode state
-  const [ezStage, setEzStage] = useState<EzStage>("input");
-  const [ezSsid, setEzSsid] = useState("");
-  const [ezPassword, setEzPassword] = useState("");
-  const [ezBssid, setEzBssid] = useState<string | undefined>(undefined);
-  const [ezBroadcasting, setEzBroadcasting] = useState(false);
-  const [ezPacketsSent, setEzPacketsSent] = useState(0);
-  const [ezError, setEzError] = useState<string | null>(null);
-
   // Shared provisioning session
   const [provisioningSessionId, setProvisioningSessionId] = useState<string | null>(null);
   const [provisioningToken, setProvisioningToken] = useState<string | null>(null);
@@ -291,14 +271,6 @@ export default function AddDeviceModal({
     setPairingBusy(false);
     setManualWifiMode(false);
     setManualWifiReason(null);
-
-    setEzStage("input");
-    setEzSsid("");
-    setEzPassword("");
-    setEzBssid(undefined);
-    setEzBroadcasting(false);
-    setEzPacketsSent(0);
-    setEzError(null);
 
     setProvisioningSessionId(null);
     setProvisioningToken(null);
@@ -370,8 +342,6 @@ export default function AddDeviceModal({
     if (step === 1 && selectedType) {
       animateStepTransition();
       setStep(2);
-    } else if (step === 2 && serialNumber.trim()) {
-      setStep(3);
     } else if (step === 3) {
       setStep(4);
     } else if (step === 4 && deviceName.trim() && selectedType) {
@@ -401,7 +371,6 @@ export default function AddDeviceModal({
   };
 
   const isPairingActive = pairingStage && pairingStage !== "success";
-  const isEzActive = ezStage === "broadcasting" || ezStage === "claiming";
 
   const handleBack = () => {
     if (isPairingActive) {
@@ -426,17 +395,10 @@ export default function AddDeviceModal({
       }
     }
 
-    if (isEzActive) {
-      setEzError("Broadcasting is in progress. Please wait or close the modal.");
-      return;
-    }
-
     if (provisioningMode) {
       setProvisioningMode(null);
       setPairingStage(null);
-      setEzStage("input");
       setPairingError(null);
-      setEzError(null);
       return;
     }
 
@@ -638,11 +600,6 @@ export default function AddDeviceModal({
       if (current?.trim()) {
         setWifiSsid(current.trim());
       }
-      const netInfo = await NetInfo.fetch();
-      const details = netInfo.details as any;
-      if (details?.bssid) {
-        setEzBssid(details.bssid);
-      }
     } catch {
       // best effort only
     }
@@ -821,66 +778,6 @@ export default function AddDeviceModal({
     }
   };
 
-  const startEzProvisioning = async () => {
-    if (!serialNumber.trim()) {
-      setEzError("Please enter your device serial number first.");
-      return;
-    }
-    if (!ezSsid.trim() || ezPassword.trim().length < 8) {
-      setEzError("Enter a valid Wi-Fi name and password (8+ characters).");
-      return;
-    }
-    if (!isSmartConfigSupported()) {
-      setEzError(
-        "EZ mode is not supported on this platform. Use BLE mode or a native build."
-      );
-      return;
-    }
-
-    setEzError(null);
-    setEzBroadcasting(true);
-    setEzStage("broadcasting");
-    setEzPacketsSent(0);
-
-    try {
-      let sessionId = provisioningSessionId;
-      let sessionToken = provisioningToken;
-
-      if (!sessionId || !sessionToken) {
-        const session = await createProvisioningSession();
-        sessionId = session.sessionId;
-        sessionToken = session.sessionToken;
-      }
-
-      if (!sessionId || !sessionToken) {
-        throw new Error("Could not initialize pairing session. Please retry.");
-      }
-
-      const result = await smartConfigProvisioningService.start({
-        ssid: ezSsid.trim(),
-        password: ezPassword,
-        bssid: ezBssid,
-        token: sessionToken,
-      });
-
-      setEzPacketsSent(result.packetsSent);
-
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      setEzStage("claiming");
-      setPairingProgressText("Broadcast complete. Waiting for cloud confirmation...");
-      await waitForCloudClaim(sessionId);
-      setEzStage("success");
-    } catch (err: any) {
-      setEzError(err?.message || "EZ mode failed. Please try again.");
-      setEzStage("error");
-    } finally {
-      setEzBroadcasting(false);
-    }
-  };
-
   const renderStep1 = () => (
     <View style={styles.stepContainer}>
       <Text style={[styles.stepTitle, { color: themeColors.text }]}>
@@ -973,17 +870,16 @@ export default function AddDeviceModal({
 
   const renderModeSelection = () => {
     const bleSupported = bleProvisioningService.isSupported();
-    const ezSupported = isSmartConfigSupported();
 
     return (
       <View style={styles.modeSelectionContainer}>
         <Text style={[styles.modeSelectionTitle, { color: themeColors.text }]}>
-          Choose Pairing Mode
+          Pair with Bluetooth
         </Text>
         <Text
           style={[styles.modeSelectionSubtitle, { color: themeColors.textSecondary }]}
         >
-          BLE is recommended for the most reliable setup.
+          Secure BLE pairing requires the native Smartera app.
         </Text>
 
         <TouchableOpacity
@@ -1037,57 +933,6 @@ export default function AddDeviceModal({
           />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => {
-            if (!ezSupported) {
-              Alert.alert(
-                "EZ Mode Not Available",
-                "EZ mode requires react-native-udp and a native iOS/Android build."
-              );
-              return;
-            }
-            setProvisioningMode("ez");
-            setEzStage("input");
-            prefillPhoneWifiIfAvailable();
-          }}
-          style={[
-            styles.modeCard,
-            {
-              backgroundColor: isDark ? "#1E293B" : "#fff",
-              borderColor: isDark ? "#334155" : "#E2E8F0",
-            },
-          ]}
-        >
-          <LinearGradient
-            colors={["#0F766E", "#14B8A6"]}
-            style={styles.modeIconCircle}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Ionicons name="wifi" size={24} color="#fff" />
-          </LinearGradient>
-          <View style={styles.modeTextContainer}>
-            <Text style={[styles.modeCardTitle, { color: themeColors.text }]}>
-              EZ Mode (SmartConfig)
-            </Text>
-            <Text
-              style={[
-                styles.modeCardSubtitle,
-                { color: themeColors.textSecondary },
-              ]}
-            >
-              {ezSupported
-                ? "Broadcast credentials over UDP."
-                : "Requires native build."}
-            </Text>
-          </View>
-          <Ionicons
-            name="chevron-forward"
-            size={20}
-            color={themeColors.textTertiary}
-          />
-        </TouchableOpacity>
       </View>
     );
   };
@@ -1461,192 +1306,6 @@ export default function AddDeviceModal({
     </View>
   );
 
-  const renderEzFlow = () => (
-    <View style={[styles.pairingCard, { backgroundColor: isDark ? "#181A24" : "#F8FAFF" }]}>
-      <View style={styles.pairingHeaderRow}>
-        <Text style={[styles.pairingTitle, { color: themeColors.text }]}>
-          EZ Mode (SmartConfig)
-        </Text>
-      </View>
-
-      {ezStage === "input" && (
-        <View style={styles.pairingSection}>
-          <Text style={[styles.pairingBodyText, { color: themeColors.textSecondary }]}>
-            Enter your 2.4GHz Wi-Fi credentials. Your phone will broadcast them
-            securely to the device.
-          </Text>
-
-          <View style={[styles.inputWrapper, { backgroundColor: themeColors.surfaceVariant }]}>
-            <Ionicons name="wifi-outline" size={22} color={themeColors.textTertiary} />
-            <TextInput
-              style={[styles.textInput, { color: themeColors.text }]}
-              placeholder="Wi-Fi Account (SSID)"
-              placeholderTextColor={themeColors.textTertiary}
-              value={ezSsid}
-              onChangeText={setEzSsid}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          <View
-            style={[
-              styles.passwordRow,
-              {
-                borderColor: themeColors.border,
-                backgroundColor: isDark ? "#0F172A" : "#fff",
-              },
-            ]}
-          >
-            <TextInput
-              style={[styles.passwordInputText, { color: themeColors.text }]}
-              placeholder="Wi-Fi Password"
-              placeholderTextColor={themeColors.textTertiary}
-              value={ezPassword}
-              onChangeText={setEzPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              secureTextEntry={!showWifiPassword}
-            />
-            <TouchableOpacity onPress={() => setShowWifiPassword((prev) => !prev)}>
-              <Text style={styles.showHideText}>
-                {showWifiPassword ? "Hide" : "Show"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.pairingActionButton, ezBroadcasting && { opacity: 0.7 }]}
-            onPress={startEzProvisioning}
-            disabled={ezBroadcasting}
-          >
-            <MaterialCommunityIcons name="broadcast" size={18} color="#fff" />
-            <Text style={styles.pairingActionText}>Start Broadcasting</Text>
-          </TouchableOpacity>
-
-          {!isSmartConfigSupported() && (
-            <View style={styles.pairingErrorBox}>
-              <Ionicons name="alert-circle" size={16} color={Colors.warning} />
-              <Text style={[styles.pairingErrorText, { color: Colors.warning }]}>
-                EZ mode requires react-native-udp and a native build. Use BLE mode
-                instead.
-              </Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {ezStage === "broadcasting" && (
-        <View style={[styles.pairingSection, { alignItems: "center" }]}>
-          <View style={styles.illustrationContainer}>
-            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-              <LinearGradient
-                colors={["#0F766E", "#14B8A6"]}
-                style={styles.illustrationCircle}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Ionicons name="wifi" size={48} color="#fff" />
-              </LinearGradient>
-            </Animated.View>
-            <View style={styles.pulseRing} />
-          </View>
-          <Text
-            style={[
-              styles.pairingBodyText,
-              { color: themeColors.textSecondary, marginTop: 16, textAlign: "center" },
-            ]}
-          >
-            Broadcasting Wi-Fi credentials to your device...
-          </Text>
-          <Text
-            style={[
-              styles.pairingBodyText,
-              {
-                color: themeColors.textTertiary,
-                marginTop: 8,
-                fontSize: 12,
-                textAlign: "center",
-              },
-            ]}
-          >
-            Keep your phone close to the device. Packets sent: {ezPacketsSent}
-          </Text>
-          <ActivityIndicator style={{ marginTop: 16 }} size="small" color={Colors.primary} />
-        </View>
-      )}
-
-      {ezStage === "claiming" && (
-        <View style={[styles.pairingSection, { alignItems: "center" }]}>
-          <View style={styles.circleProgressOuter}>
-            <View style={styles.circleProgressInner}>
-              <ActivityIndicator size="large" color={Colors.primary} />
-            </View>
-          </View>
-          <Text
-            style={[
-              styles.pairingBodyText,
-              { color: themeColors.textSecondary, marginTop: 14, textAlign: "center" },
-            ]}
-          >
-            Broadcast complete. Waiting for cloud confirmation...
-          </Text>
-        </View>
-      )}
-
-      {ezStage === "success" && (
-        <View style={[styles.pairingSection, { alignItems: "center" }]}>
-          <View style={styles.successBubble}>
-            <Ionicons name="checkmark" size={26} color="#fff" />
-          </View>
-          <Text style={[styles.successTitle, { color: themeColors.text }]}>
-            Device connected successfully
-          </Text>
-          <Text
-            style={[
-              styles.pairingBodyText,
-              { color: themeColors.textSecondary, textAlign: "center" },
-            ]}
-          >
-            Continue with room assignment and device naming.
-          </Text>
-          <TouchableOpacity
-            style={styles.pairingActionButton}
-            onPress={() => {
-              setEzStage("input");
-              setProvisioningMode(null);
-              setStep(3);
-            }}
-          >
-            <Ionicons name="arrow-forward" size={18} color="#fff" />
-            <Text style={styles.pairingActionText}>Continue Setup</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {(ezStage === "error" || !!ezError) && (
-        <View style={styles.pairingSection}>
-          <View style={styles.pairingErrorBox}>
-            <Ionicons name="alert-circle" size={16} color={Colors.error} />
-            <Text style={styles.pairingErrorText}>
-              {ezError || "EZ mode failed. Please try again."}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.pairingActionButton}
-            onPress={() => {
-              setEzError(null);
-              setEzStage("input");
-            }}
-          >
-            <Ionicons name="refresh" size={18} color="#fff" />
-            <Text style={styles.pairingActionText}>Try Again</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
-
   const renderStep2 = () => (
     <View style={styles.stepContainer}>
       <Text style={[styles.stepTitle, { color: themeColors.text }]}>
@@ -1697,7 +1356,6 @@ export default function AddDeviceModal({
       )}
 
       {provisioningMode === "ble" && renderBleFlow()}
-      {provisioningMode === "ez" && renderEzFlow()}
 
       {/* Visual pattern decoration */}
       {!scanningQR && !provisioningMode && (
@@ -2013,7 +1671,9 @@ export default function AddDeviceModal({
 
   const canContinue = (() => {
     if (step === 1) return !!selectedType;
-    if (step === 2) return !!serialNumber.trim() && !provisioningMode;
+    // Device ownership must be confirmed by the BLE/cloud claim flow. Step 2
+    // advances only through the pairing success action above.
+    if (step === 2) return false;
     if (step === 3) return true;
     if (step === 4) return !!deviceName.trim();
     return false;

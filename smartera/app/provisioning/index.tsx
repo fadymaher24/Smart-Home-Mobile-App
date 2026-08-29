@@ -1,8 +1,7 @@
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Platform, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useProvisioning } from '../../hooks/useProvisioning';
-import WebProvisioningForm from '../../screens/provisioning/WebProvisioningForm';
 
 export default function ProvisioningIndex() {
   const router = useRouter();
@@ -31,7 +30,10 @@ export default function ProvisioningIndex() {
   if (Platform.OS === 'web') {
     return (
       <View style={styles.container}>
-        <WebProvisioningForm />
+        <Text style={styles.webTitle}>Use the Smartera mobile app to add a plug</Text>
+        <Text style={styles.webMessage}>
+          Wi-Fi credentials are transferred directly over a secure, physically authorized Bluetooth connection and are never stored by the web service.
+        </Text>
       </View>
     );
   }
@@ -49,5 +51,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f5f5f5',
+  },
+  webTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  webMessage: {
+    maxWidth: 520,
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
   },
 });

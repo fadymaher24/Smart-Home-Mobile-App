@@ -1,5 +1,5 @@
 // Device Service - Handles real-time device data from backend
-import { API_BASE_URL, apiRequest } from '../utils/api';
+import { apiRequest, ApiError } from '../utils/api';
 
 // Types for telemetry data from backend
 export interface DeviceTelemetry {
@@ -11,6 +11,7 @@ export interface DeviceTelemetry {
   current: number;
   power: number;
   energy?: number;
+  energyWh?: number;
   energyTotal?: number;
   powerFactor?: number;
   frequency?: number;
@@ -39,6 +40,8 @@ export interface Device {
   lastSeenAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  controlPending?: boolean;
+  desiredPowerState?: boolean;
 }
 
 export interface PowerUsageStats {
@@ -88,8 +91,9 @@ export const deviceService = {
     try {
       const response = await apiRequest(`/telemetry/${deviceId}/latest`, 'GET', undefined, token);
       return response.data || null;
-    } catch {
-      return null;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
     }
   },
 
@@ -101,18 +105,13 @@ export const deviceService = {
 
   // Get all rooms for the user (GET /api/rooms)
   async getRooms(token: string): Promise<{ roomId: number; name: string; icon?: string }[]> {
-    try {
-      const response = await apiRequest('/rooms', 'GET', undefined, token);
-      const roomList = response.rooms || response || [];
-      // Normalize room data - backend might return 'roomId' or 'id'
-      return roomList.map((room: any) => ({
-        roomId: room.roomId ?? room.id,
-        name: room.name,
-        icon: room.icon,
-      }));
-    } catch {
-      return [];
-    }
+    const response = await apiRequest('/rooms', 'GET', undefined, token);
+    const roomList = response.rooms || response || [];
+    return roomList.map((room: any) => ({
+      roomId: room.roomId ?? room.id,
+      name: room.name,
+      icon: room.icon,
+    }));
   },
 
   // Create a new room (POST /api/rooms)
@@ -128,15 +127,6 @@ export const deviceService = {
       name: room.name,
       icon: room.icon,
     };
-  },
-
-  // Add new device (POST /api/device)
-  async addDevice(
-    deviceData: { serialNumber: string; name: string; type: string; roomId?: number },
-    token: string
-  ): Promise<Device> {
-    const response = await apiRequest('/device', 'POST', deviceData, token);
-    return response.device || response;
   },
 
   // Delete device (DELETE /api/device/:id)
@@ -169,6 +159,15 @@ export const deviceService = {
     cost: number;
   }> {
     return apiRequest('/power-usage/weekly', 'GET', undefined, token);
+  },
+
+  async getMonthlyPowerUsage(token: string): Promise<{
+    month: string;
+    totalUsage: number;
+    weeklyData: number[];
+    cost: number;
+  }> {
+    return apiRequest('/power-usage/monthly', 'GET', undefined, token);
   },
 
   // Get daily power usage (GET /api/power-usage/daily)

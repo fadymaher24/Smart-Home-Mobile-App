@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useProvisioning } from '../../hooks/useProvisioning';
@@ -16,17 +16,23 @@ export default function SuccessScreen() {
 
   const [deviceName, setDeviceName] = useState(defaultName);
   const [roomName, setRoomName] = useState(state.roomName || 'Living Room');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleFinish = async () => {
-    await finalizeSetup({ deviceName, roomName });
-    await reset();
-    router.replace('/Welcome' as any);
-  };
-
-  const handleAddAnother = async () => {
-    await finalizeSetup({ deviceName, roomName });
-    await reset();
-    router.replace('/provisioning/scan' as any);
+  const saveAndContinue = async (destination: '/Welcome' | '/provisioning/scan') => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      await finalizeSetup({ deviceName, roomName });
+      await reset();
+      router.replace(destination as any);
+    } catch (error) {
+      Alert.alert(
+        'Could not finish setup',
+        error instanceof Error ? error.message : 'Please try again.'
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -44,6 +50,7 @@ export default function SuccessScreen() {
         onChangeText={setDeviceName}
         placeholder={t('provisioning.success.renamePlaceholder')}
         placeholderTextColor="#999"
+        editable={!isSaving}
       />
 
       <Text style={styles.label}>{t('provisioning.success.roomLabel')}</Text>
@@ -51,7 +58,14 @@ export default function SuccessScreen() {
         {ROOM_OPTIONS.map(room => {
           const selected = roomName === room;
           return (
-            <TouchableOpacity key={room} style={styles.radioRow} onPress={() => setRoomName(room)}>
+            <TouchableOpacity
+              key={room}
+              style={styles.radioRow}
+              onPress={() => setRoomName(room)}
+              disabled={isSaving}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selected, disabled: isSaving }}
+            >
               <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
                 {selected && <View style={styles.radioInner} />}
               </View>
@@ -61,10 +75,24 @@ export default function SuccessScreen() {
         })}
       </View>
 
-      <TouchableOpacity style={styles.primaryButton} onPress={handleFinish}>
-        <Text style={styles.primaryButtonText}>{t('common.done')}</Text>
+      <TouchableOpacity
+        style={[styles.primaryButton, isSaving && styles.buttonDisabled]}
+        onPress={() => saveAndContinue('/Welcome')}
+        disabled={isSaving}
+        accessibilityRole="button"
+      >
+        {isSaving ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <Text style={styles.primaryButtonText}>{t('common.done')}</Text>
+        )}
       </TouchableOpacity>
-      <TouchableOpacity style={styles.secondaryButton} onPress={handleAddAnother}>
+      <TouchableOpacity
+        style={[styles.secondaryButton, isSaving && styles.buttonDisabled]}
+        onPress={() => saveAndContinue('/provisioning/scan')}
+        disabled={isSaving}
+        accessibilityRole="button"
+      >
         <Text style={styles.secondaryButtonText}>{t('provisioning.success.addAnother')}</Text>
       </TouchableOpacity>
     </View>
@@ -178,5 +206,8 @@ const styles = StyleSheet.create({
     color: '#5B6EF5',
     fontSize: 16,
     fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });

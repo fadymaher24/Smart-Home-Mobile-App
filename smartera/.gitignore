@@ -45,3 +45,17 @@ specs/
 android/
 ios/
 __tests__
+
+# Keep regression coverage for security- and protocol-sensitive flows.
+!__tests__/
+__tests__/*
+!__tests__/context/
+__tests__/context/*
+!__tests__/context/AuthContext.test.tsx
+!__tests__/hooks/
+__tests__/hooks/*
+!__tests__/hooks/useDeviceData.test.tsx
+!__tests__/hooks/useProvisioning.test.tsx
+!__tests__/services/
+__tests__/services/*
+!__tests__/services/deviceService.test.ts

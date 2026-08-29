@@ -22,8 +22,14 @@ const LoginScreen = () => {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
-    if (!email || !password || (!isLogin && !name)) {
+    const normalizedEmail = email.trim();
+    const normalizedName = name.trim();
+    if (!normalizedEmail || !password || (!isLogin && !normalizedName)) {
       Alert.alert("Error", "Please fill all fields");
+      return;
+    }
+    if (!isLogin && (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password))) {
+      Alert.alert("Invalid Password", "Use at least 8 characters with a letter and a number.");
       return;
     }
 
@@ -31,9 +37,9 @@ const LoginScreen = () => {
 
     try {
       if (isLogin) {
-        await login(email, password);
+        await login(normalizedEmail, password);
       } else {
-        await register(name, email, password);
+        await register(normalizedName, normalizedEmail, password);
       }
     } catch (error: any) {
       const message = error?.message || (isLogin ? "Login failed" : "Registration failed");
@@ -63,6 +69,8 @@ const LoginScreen = () => {
           placeholderTextColor={theme === "dark" ? "#B0BEC5" : "#757575"}
           value={name}
           onChangeText={setName}
+          autoComplete="name"
+          textContentType="name"
         />
       )}
 
@@ -74,6 +82,8 @@ const LoginScreen = () => {
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
+        autoComplete="email"
+        textContentType="emailAddress"
       />
 
       <TextInput
@@ -83,12 +93,16 @@ const LoginScreen = () => {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        autoComplete={isLogin ? "current-password" : "new-password"}
+        textContentType={isLogin ? "password" : "newPassword"}
+        onSubmitEditing={handleSubmit}
       />
 
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
         onPress={handleSubmit}
         disabled={loading}
+        accessibilityRole="button"
       >
         {loading ? (
           <ActivityIndicator color="#fff" />
