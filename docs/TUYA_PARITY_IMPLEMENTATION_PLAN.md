@@ -1068,6 +1068,13 @@ Exit criteria:
 
 Objective: establish a genuine device identity independent of account claims.
 
+Started implementation (2026-08-29): `SEC-106`, `BE-101`, and the
+claim-token-removal part of `FW-101` have an initial code slice. It creates a
+per-device runtime credential after an atomic claim and persists it on the
+plug. This is not a Phase 1 exit: broker authentication/ACL enforcement,
+factory identity, encrypted storage, rotation operations, and lifecycle tests
+remain required.
+
 Work packages:
 
 - `SEC-101`: Implement factory device registry and unique issuance API.

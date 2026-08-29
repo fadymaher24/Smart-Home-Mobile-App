@@ -15,15 +15,22 @@ claim state must be updated in all four components.
    the plug's physical 120-second pairing window is open.
 4. The plug connects to MQTT and publishes its claim request. The backend
    atomically consumes the unexpired session before assigning the plug.
-5. The backend publishes a retained `claim_result` on the plug's authenticated
-   config topic. The plug does not mark provisioning complete merely because
-   the broker accepted its announcement.
+5. The backend publishes a retained `claim_result` with a newly issued runtime
+   MQTT credential on the plug's bootstrap-authenticated config topic. The
+   plug persists that credential and acknowledges its credential ID; the backend
+   clears the retained response, then the plug clears the claim token and
+   reconnects before it marks provisioning complete.
 6. The app waits for an authenticated Socket.IO provisioning event or polls the
    authenticated session endpoint, then applies the device name and room.
 
 Wi-Fi passwords must never be uploaded to the backend, stored in AsyncStorage,
 logged, or returned from an API. Web and SmartConfig provisioning are disabled;
 the supported flow requires a native BLE build.
+
+The provisioning token is short lived and single use. It is a temporary
+bootstrap credential only and must never be stored as, or reused as, the
+long-lived MQTT password. Runtime MQTT credentials are individually issued,
+rotatable, revocable, and delivered only on the bootstrap connection.
 
 ESP32 is the provisionable smart-plug target. ESP8266 has no BLE radio, so its
 build remains available for already provisioned/bench hardware but cannot enter
