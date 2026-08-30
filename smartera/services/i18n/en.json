@@ -16,6 +16,15 @@
       "title": "Discover Devices",
       "scanning": "Scanning for devices...",
       "scanBle": "Scan Devices Nearby",
+      "scanQr": "Scan plug QR label",
+      "qrMatched": "QR matched {{serial}}",
+      "qrInvalid": "This QR code is not a Smartera smart-plug label.",
+      "cameraChecking": "Checking camera permission...",
+      "cameraPermissionRequired": "Camera permission is required to scan the plug label.",
+      "cameraSettingsHint": "Enable Camera in Settings to continue.",
+      "cameraGrant": "Grant camera permission",
+      "openSettings": "Open Settings",
+      "cameraUnavailable": "The camera is unavailable. Use a physical device with a production build.",
       "scanningBle": "Scanning devices nearby...",
       "instructionsTitle": "Put your plug in pairing mode",
       "instructionsBody": "Press and hold the device button for 5 seconds until the LED blinks twice, stays on for 1 second, and repeats.",
@@ -34,6 +43,10 @@
       "deviceType": "Device Type",
       "signalStrength": "Signal Strength",
       "serialNumber": "Serial Number"
+    },
+    "networkRecovery": {
+      "title": "Network recovery",
+      "updateWifi": "Update Wi-Fi"
     },
     "connect": {
       "title": "Connect to Device",

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useCameraPermissions, CameraView } from "expo-camera";
 import {
+  Linking,
   Platform,
   SafeAreaView,
   StatusBar,
@@ -10,6 +11,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 
 export default function QRScan({
   onScanned,
@@ -18,6 +20,7 @@ export default function QRScan({
   onScanned: (id: string) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
@@ -26,14 +29,14 @@ export default function QRScan({
     if (!permission) {
       requestPermission();
     }
-  }, [permission]);
+  }, [permission, requestPermission]);
 
   if (!permission) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#5B6EF5" />
         <Text style={{ color: "#fff", marginTop: 16 }}>
-          Checking camera permissions...
+          {t("provisioning.scan.cameraChecking")}
         </Text>
       </View>
     );
@@ -43,18 +46,30 @@ export default function QRScan({
     return (
       <View style={styles.centered}>
         <Text style={{ marginBottom: 16, color: "#fff" }}>
-          Camera permission is required to scan QR codes.
-          {Platform.OS === "ios" &&
-            "\nGo to Settings > Privacy > Camera to enable."}
+          {t("provisioning.scan.cameraPermissionRequired")}
+          {Platform.OS === "ios" && `\n${t("provisioning.scan.cameraSettingsHint")}`}
         </Text>
-        <TouchableOpacity onPress={requestPermission} style={styles.button}>
-          <Text style={{ color: "#fff" }}>Grant Permission</Text>
+        <TouchableOpacity
+          onPress={() => permission.canAskAgain ? requestPermission() : Linking.openSettings()}
+          style={styles.button}
+          accessibilityRole="button"
+          accessibilityLabel={permission.canAskAgain
+            ? t("provisioning.scan.cameraGrant")
+            : t("provisioning.scan.openSettings")}
+        >
+          <Text style={{ color: "#fff" }}>
+            {permission.canAskAgain
+              ? t("provisioning.scan.cameraGrant")
+              : t("provisioning.scan.openSettings")}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={onCancel}
           style={[styles.button, { backgroundColor: "#aaa", marginTop: 8 }]}
+          accessibilityRole="button"
+          accessibilityLabel={t("common.cancel")}
         >
-          <Text style={{ color: "#fff" }}>Cancel</Text>
+          <Text style={{ color: "#fff" }}>{t("common.cancel")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -65,14 +80,15 @@ export default function QRScan({
     return (
       <View style={styles.centered}>
         <Text style={{ color: "#fff" }}>
-          Camera is not available on this device or Expo Go. Try on a real
-          device with a production build.
+          {t("provisioning.scan.cameraUnavailable")}
         </Text>
         <TouchableOpacity
           onPress={onCancel}
           style={[styles.button, { marginTop: 16 }]}
+          accessibilityRole="button"
+          accessibilityLabel={t("common.cancel")}
         >
-          <Text style={{ color: "#fff" }}>Cancel</Text>
+          <Text style={{ color: "#fff" }}>{t("common.cancel")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -92,8 +108,13 @@ export default function QRScan({
           }
         }}
       />
-      <TouchableOpacity onPress={onCancel} style={styles.cancelBtn}>
-        <Text style={{ color: "#fff" }}>Cancel</Text>
+      <TouchableOpacity
+        onPress={onCancel}
+        style={styles.cancelBtn}
+        accessibilityRole="button"
+        accessibilityLabel={t("common.cancel")}
+      >
+        <Text style={{ color: "#fff" }}>{t("common.cancel")}</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );

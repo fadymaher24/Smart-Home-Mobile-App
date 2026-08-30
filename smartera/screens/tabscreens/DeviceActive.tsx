@@ -23,7 +23,8 @@ import { useDevices, useRealtimeConnection, useRooms } from "../../hooks/useDevi
 import { Device as ServiceDevice } from "../../services/deviceService";
 import { useBleProvisioning } from "../../hooks/useBleProvisioning";
 import { MaterialCommunityIcons, Ionicons, Feather } from "@expo/vector-icons";
-import AddDeviceModal from "../provisioning/AddDeviceModal";
+import { router } from "expo-router";
+import { useTranslation } from "react-i18next";
 
 // Device types matching backend
 type DeviceType = 'SMART_PLUG' | 'RGB_LIGHT' | 'THERMOSTAT' | 'SENSOR';
@@ -257,6 +258,7 @@ const DeviceDetailsModal = ({
   onUpdate: (id: number, data: { name: string; roomId: number | null }) => Promise<void>;
   rooms: Room[];
 }) => {
+  const { t } = useTranslation();
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const [controlling, setControlling] = useState(false);
@@ -689,6 +691,28 @@ const DeviceDetailsModal = ({
               </View>
             </View>
 
+            {isSmartPlug && (
+              <View style={styles.detailsSection}>
+                <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#333' }]}>
+                  {t('provisioning.networkRecovery.title')}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.editSaveButton, { backgroundColor: Colors.primary }]}
+                  onPress={() => {
+                    onClose();
+                    router.push({ pathname: '/provisioning/scan', params: { serial: device.serialNumber } } as any);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('provisioning.networkRecovery.updateWifi')}
+                >
+                  <Ionicons name="wifi-outline" size={18} color="#fff" />
+                  <Text style={styles.editSaveButtonText}>
+                    {t('provisioning.networkRecovery.updateWifi')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Danger Zone */}
             <View style={styles.detailsSection}>
               <Text style={[styles.sectionTitle, { color: Colors.error }]}>Danger Zone</Text>
@@ -737,45 +761,15 @@ export default function DeviceActive() {
     removeDevice,
     updateDevice,
   } = useDevices();
-  const { rooms, createRoom, creating: creatingRoom } = useRooms();
+  const { rooms } = useRooms();
 
-  const [addModalVisible, setAddModalVisible] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<ServiceDevice | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [addingDevice, setAddingDevice] = useState(false);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await refresh();
     setRefreshing(false);
-  };
-
-  const handleCreateRoom = async (name: string, icon?: string): Promise<Room> => {
-    const newRoom = await createRoom(name, icon);
-    return newRoom;
-  };
-
-  const handleAddDevice = async (data: { serialNumber: string; name: string; type: DeviceType; roomId?: number }) => {
-    setAddingDevice(true);
-    try {
-      const latestDevices = await refresh();
-      const claimedDevice = latestDevices?.find(
-        device => device.serialNumber === data.serialNumber
-      );
-      if (!claimedDevice) {
-        throw new Error('The device claim has not reached the cloud yet. Please try again.');
-      }
-      await updateDevice(claimedDevice.id, {
-        name: data.name,
-        roomId: data.roomId ?? null,
-      });
-      setAddModalVisible(false);
-      Alert.alert('Success', `${data.name} has been added successfully!`);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to finish device setup');
-    } finally {
-      setAddingDevice(false);
-    }
   };
 
   const handleControl = async (deviceId: number, action: 'turnOn' | 'turnOff') => {
@@ -875,7 +869,7 @@ export default function DeviceActive() {
             </Text>
             <TouchableOpacity
               style={styles.emptyButton}
-              onPress={() => setAddModalVisible(true)}
+              onPress={() => router.push('/provisioning' as any)}
             >
               <Ionicons name="add" size={20} color="#fff" />
               <Text style={styles.emptyButtonText}>Add Device</Text>
@@ -938,7 +932,7 @@ export default function DeviceActive() {
       {/* FAB */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => setAddModalVisible(true)}
+        onPress={() => router.push('/provisioning' as any)}
         activeOpacity={0.8}
       >
         <LinearGradient
@@ -948,17 +942,6 @@ export default function DeviceActive() {
           <Ionicons name="add" size={28} color="#fff" />
         </LinearGradient>
       </TouchableOpacity>
-
-      {/* Modals */}
-      <AddDeviceModal
-        visible={addModalVisible}
-        onClose={() => setAddModalVisible(false)}
-        onAdd={handleAddDevice}
-        loading={addingDevice}
-        rooms={rooms}
-        onCreateRoom={handleCreateRoom}
-        creatingRoom={creatingRoom}
-      />
 
       <DeviceDetailsModal
         device={selectedDevice}

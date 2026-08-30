@@ -1072,7 +1072,8 @@ Started implementation (2026-08-29): `SEC-106`, `BE-101`, and the
 claim-token-removal part of `FW-101` have an initial code slice. It creates a
 per-device runtime credential after an atomic claim and persists it on the
 plug. This is not a Phase 1 exit: broker authentication/ACL enforcement,
-factory identity, encrypted storage, rotation operations, and lifecycle tests
+factory identity, encrypted storage, revocation/quarantine operations, audit,
+and lifecycle tests
 remain required.
 
 Work packages:
@@ -1105,10 +1106,12 @@ Exit criteria:
 
 Objective: replace hardcoded/ad hoc settings with a typed, versioned contract.
 
-Started implementation (2026-08-29): a schema-v1 desired/reported shadow is
-persisted and exposed through owner-scoped APIs. Desired settings are published
-to the versioned MQTT topic and intentionally remain pending until firmware
-implements the matching apply/reported-ack protocol.
+Started implementation (2026-08-29): schema-v1 desired/reported shadow is
+persisted and exposed through owner-scoped APIs. The initial ESP32 contract is
+limited to real auto-off behavior: desired values are validated, checksum-backed
+in device storage, versioned, applied idempotently, and acknowledged after the
+plug persists them. Other smart-plug settings remain future schema work, not
+partially supported controls.
 
 Work packages:
 
@@ -1137,6 +1140,14 @@ Exit criteria:
 ### Phase 3: Production Hardware, Metering, and Safety
 
 Objective: prove the physical plug design and measurement/protection chain.
+
+Current implementation status: the firmware now retains a checksum-protected
+ESP32 energy counter, emits an explicit `estimated` measurement-quality flag,
+and exposes sustained over-power conditions before the existing emergency
+latch threshold. This is deliberately not calibrated metering: the current
+ACS712/default-voltage path cannot satisfy FW-301/FW-302 or the Phase 3 exit
+criteria. The legacy `update_config` command is rejected so it cannot claim to
+change a safety limit without enforcement.
 
 Work packages:
 
@@ -1184,6 +1195,28 @@ Work packages:
   states.
 - `QA-401`: Qualify supported router/security/band/SSID/password/DHCP/DNS cases.
 - `QA-402`: Test interruption at every pairing transition and app lifecycle state.
+
+Current implementation status (software-complete slice):
+
+- `FW-401` has BLE protocol version 1, bounded 20-byte fragmentation, ordered
+  reassembly, and physical-window enforcement. Cryptographic proof of possession
+  is intentionally not claimed: it requires a random factory-provisioned secret
+  or device key and a manufacturing label/identity record. The predictable
+  MAC-derived verification code must not be used as proof.
+- `FW-402` and `FW-403` stage Wi-Fi, preserve the previous network, commit only
+  after a runtime-credential MQTT reconnect/ACK, roll back on activation failure,
+  and expose stable Wi-Fi, MQTT, claim, protocol, and timeout codes.
+- `BE-401` and `BE-402` provide active-session resume/cancel/status endpoints,
+  correlation IDs, authoritative two-step claim completion, and allowlisted
+  funnel telemetry. Mobile telemetry cannot claim a device and cannot persist
+  Wi-Fi values or arbitrary error text.
+- `APP-401` through `APP-405` now use one Expo Router provisioning flow, exact QR
+  serial-to-nearby matching, physical pairing instructions, secure local resume
+  with backend reconciliation, owned-plug network recovery, and localized camera
+  permission recovery with accessibility labels.
+- `QA-401` and `QA-402` remain release gates requiring real ESP32 plugs, Android
+  and iOS devices, supported router/security variants, interruption testing, and
+  measured onboarding targets. They cannot be completed by compilation alone.
 
 Exit criteria:
 

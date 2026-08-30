@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DiscoveredDevice,
+  ProvisioningErrorCode,
   ProvisioningPhase,
   WifiNetworkOption,
   useProvisioningContext,
@@ -35,7 +36,7 @@ interface UseProvisioningReturn {
   isLoading: boolean;
   isDiscovering: boolean;
   startProvisioning: (deviceType: string) => Promise<void>;
-  beginBleScan: () => Promise<DiscoveredDevice[]>;
+  beginBleScan: (targetSerial?: string) => Promise<DiscoveredDevice[]>;
   selectDeviceAndConnect: (device: DiscoveredDevice) => Promise<boolean>;
   sendCredentials: (ssid: string, password: string) => Promise<void>;
   finalizeSetup: (input: { deviceName: string; roomName: string }) => Promise<void>;
@@ -64,6 +65,36 @@ const toWifiOptions = (
     });
 };
 
+function provisioningFailure(error: unknown): {
+  code: ProvisioningErrorCode;
+  message: string;
+  retryable: boolean;
+} {
+  const failure = error as Error & { code?: string };
+  if (typeof failure.code !== 'string') {
+    const cloudTimedOut = failure.message?.toLowerCase().includes('cloud registration');
+    return {
+      code: cloudTimedOut ? 'CLOUD_TIMEOUT' : 'UNKNOWN',
+      message: failure.message || 'Provisioning failed unexpectedly.',
+      retryable: true,
+    };
+  }
+  const codeMap: Record<string, ProvisioningErrorCode> = {
+    INVALID_CREDENTIALS: 'CREDENTIALS_REJECTED',
+    WIFI_AUTH_FAILED: 'WIFI_AUTH_FAILED',
+    WIFI_NOT_FOUND: 'WIFI_NOT_FOUND',
+    WIFI_TIMEOUT: 'WIFI_TIMEOUT',
+    MQTT_CONNECT_FAILED: 'CLOUD_VERIFICATION_FAILED',
+    CLAIM_ANNOUNCE_FAILED: 'CLAIM_FAILED',
+    PROTOCOL_UNSUPPORTED: 'BLE_CONNECT_FAILED',
+  };
+  return {
+    code: codeMap[failure.code] || 'UNKNOWN',
+    message: failure.message,
+    retryable: failure.code !== 'PROTOCOL_UNSUPPORTED',
+  };
+}
+
 export function useProvisioning(): UseProvisioningReturn {
   const context = useProvisioningContext();
   const { token: authToken } = useAuth();
@@ -71,6 +102,7 @@ export function useProvisioning(): UseProvisioningReturn {
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(180);
   const cloudWatcherRef = useRef<(() => void) | null>(null);
+  const reconciledSessionRef = useRef<string | null>(null);
 
   const emitTelemetry = useCallback(
     async (event: string, data: Record<string, unknown>) => {
@@ -135,6 +167,31 @@ export function useProvisioning(): UseProvisioningReturn {
     };
   }, []);
 
+  useEffect(() => {
+    const sessionId = context.state.sessionId;
+    if (!authToken || !sessionId || reconciledSessionRef.current === sessionId) return;
+    reconciledSessionRef.current = sessionId;
+
+    void fetch(`${API_BASE_URL}/provisioning/session/${sessionId}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    }).then(async response => {
+      if (!response.ok) return;
+      const session = await response.json();
+      if (session.status === 'claimed') context.setPhase('claimed');
+      if (session.status === 'mqtt_connecting') context.setPhase('cloud_verifying');
+      if (session.status === 'failed' || session.status === 'expired') {
+        context.setError(
+          session.status === 'expired' ? 'SESSION_EXPIRED' : 'CLAIM_FAILED',
+          session.error || 'The saved setup session can no longer continue.',
+          session.status !== 'expired'
+        );
+      }
+    }).catch(error => provisioningLogger.warn('resume_session_failed', {
+      errorCode: 'CLOUD_VERIFICATION_FAILED',
+      message: (error as Error).message,
+    }));
+  }, [authToken, context, context.state.sessionId]);
+
   const startProvisioning = useCallback(async (deviceType: string) => {
     setIsLoading(true);
     context.clearError();
@@ -153,7 +210,7 @@ export function useProvisioning(): UseProvisioningReturn {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data?.message || 'Failed to start provisioning session.');
+        throw new Error(data?.error || data?.message || 'Failed to start provisioning session.');
       }
 
       const data = await response.json();
@@ -170,13 +227,13 @@ export function useProvisioning(): UseProvisioningReturn {
     }
   }, [authToken, context]);
 
-  const beginBleScan = useCallback(async () => {
+  const beginBleScan = useCallback(async (targetSerial?: string) => {
     setIsDiscovering(true);
     context.clearError();
     context.setPhase('ble_scanning');
     const started = Date.now();
     try {
-      const plugs = await bleProvisioningService.discoverPlugs();
+      const plugs = await bleProvisioningService.discoverPlugs(targetSerial);
       const mapped: DiscoveredDevice[] = plugs.map(plug => ({
         id: plug.id,
         name: plug.name,
@@ -206,7 +263,7 @@ export function useProvisioning(): UseProvisioningReturn {
       await emitTelemetry('scan_completed', {
         success: false,
         durationMs: Date.now() - started,
-        error: (error as Error).message,
+        errorCode: 'SCAN_FAILED',
       });
       return [];
     } finally {
@@ -256,7 +313,7 @@ export function useProvisioning(): UseProvisioningReturn {
         attempts,
         retries: Math.max(0, attempts - 1),
         durationMs: Date.now() - started,
-        error: (error as Error).message,
+        errorCode: 'BLE_CONNECT_FAILED',
       });
       return false;
     } finally {
@@ -377,11 +434,12 @@ export function useProvisioning(): UseProvisioningReturn {
         durationMs: Date.now() - claimStart,
       });
     } catch (error) {
-      context.setError('CLOUD_VERIFICATION_FAILED', (error as Error).message, true);
+      const failure = provisioningFailure(error);
+      context.setError(failure.code, failure.message, failure.retryable);
       await emitTelemetry('claim_latency', {
         success: false,
         durationMs: Date.now() - claimStart,
-        error: (error as Error).message,
+        errorCode: failure.code,
       });
     } finally {
       if (cloudWatcherRef.current) {
@@ -427,9 +485,23 @@ export function useProvisioning(): UseProvisioningReturn {
       cloudWatcherRef.current();
       cloudWatcherRef.current = null;
     }
+    if (authToken && context.state.sessionId) {
+      const cancelResponse = await fetch(`${API_BASE_URL}/provisioning/session/${context.state.sessionId}/cancel`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+      }).catch(() => undefined);
+      if (!cancelResponse && !['claimed', 'complete'].includes(context.state.phase)) {
+        return;
+      }
+      if (cancelResponse?.status === 409) {
+        context.setPhase('cloud_verifying');
+        return;
+      }
+    }
     await context.reset();
+    reconciledSessionRef.current = null;
     setRemainingSeconds(180);
-  }, [context]);
+  }, [authToken, context]);
 
   const state = useMemo(
     () => ({

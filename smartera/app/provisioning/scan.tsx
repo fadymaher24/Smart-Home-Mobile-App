@@ -2,18 +2,22 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { DiscoveredDevice } from '../../context/ProvisioningContext';
 import { useProvisioning } from '../../hooks/useProvisioning';
+import QRScan from '../../screens/tabscreens/QRScan';
+import { parseSerialFromQRCode } from '../../utils/wifi';
 
 export default function ScanScreen() {
   const { t } = useTranslation();
+  const { serial } = useLocalSearchParams<{ serial?: string }>();
   const {
     state,
     error,
@@ -25,6 +29,13 @@ export default function ScanScreen() {
     clearError,
   } = useProvisioning();
   const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
+  const [isQrScannerOpen, setQrScannerOpen] = useState(false);
+  const [targetSerial, setTargetSerial] = useState<string | null>(
+    typeof serial === 'string' && /^SP-[A-F0-9]{12}$/i.test(serial)
+      ? serial.toUpperCase()
+      : null
+  );
+  const [qrError, setQrError] = useState<string | null>(null);
 
   const remaining = useMemo(() => {
     const mins = Math.floor(state.remainingSeconds / 60)
@@ -41,9 +52,24 @@ export default function ScanScreen() {
 
   const handleStartScan = useCallback(async () => {
     clearError();
-    const found = await beginBleScan();
+    const found = await beginBleScan(targetSerial || undefined);
     setDevices(found);
-  }, [beginBleScan, clearError]);
+  }, [beginBleScan, clearError, targetSerial]);
+
+  const handleQrScan = useCallback(async (payload: string) => {
+    setQrScannerOpen(false);
+    const setupIdentity = parseSerialFromQRCode(payload);
+    const normalizedSerial = setupIdentity?.serialNumber.toUpperCase() || '';
+    if (!/^SP-[A-F0-9]{12}$/.test(normalizedSerial)) {
+      setDevices([]);
+      setQrError(t('provisioning.scan.qrInvalid'));
+      return;
+    }
+    setQrError(null);
+    setTargetSerial(normalizedSerial);
+    const found = await beginBleScan(normalizedSerial);
+    setDevices(found);
+  }, [beginBleScan, t]);
 
   const handleSelectDevice = useCallback(
     async (device: DiscoveredDevice) => {
@@ -57,7 +83,12 @@ export default function ScanScreen() {
   );
 
   const renderDevice = ({ item }: { item: DiscoveredDevice }) => (
-    <TouchableOpacity style={styles.deviceItem} onPress={() => handleSelectDevice(item)}>
+    <TouchableOpacity
+      style={styles.deviceItem}
+      onPress={() => handleSelectDevice(item)}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name}, ${item.serialNumber}`}
+    >
       <View style={styles.deviceInfo}>
         <Text style={styles.deviceName}>{item.name}</Text>
         <Text style={styles.deviceMeta}>{item.serialNumber}</Text>
@@ -76,7 +107,13 @@ export default function ScanScreen() {
           <Text style={styles.timerLabel}>{t('provisioning.scan.globalTimer')}</Text>
           <Text style={styles.timerValue}>{state.phase === 'idle' ? '3:00' : remaining}</Text>
         </View>
-        <TouchableOpacity style={styles.primaryButton} onPress={handleStart} disabled={isLoading}>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={handleStart}
+          disabled={isLoading}
+          accessibilityRole="button"
+          accessibilityLabel={t('provisioning.scan.instructionsCta')}
+        >
           <Text style={styles.primaryButtonText}>{t('provisioning.scan.instructionsCta')}</Text>
         </TouchableOpacity>
       </View>
@@ -92,8 +129,23 @@ export default function ScanScreen() {
         style={styles.primaryButton}
         onPress={handleStartScan}
         disabled={isDiscovering || isLoading}
+        accessibilityRole="button"
+        accessibilityLabel={t('provisioning.scan.scanBle')}
       >
         <Text style={styles.primaryButtonText}>{t('provisioning.scan.scanBle')}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.secondaryButton}
+        onPress={() => setQrScannerOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={t('provisioning.scan.scanQr')}
+      >
+        <Text style={styles.secondaryButtonText}>
+          {targetSerial
+            ? t('provisioning.scan.qrMatched', { serial: targetSerial })
+            : t('provisioning.scan.scanQr')}
+        </Text>
       </TouchableOpacity>
 
       {(isDiscovering || isLoading) && (
@@ -104,6 +156,7 @@ export default function ScanScreen() {
       )}
 
       {error && <Text style={styles.errorText}>{error.message}</Text>}
+      {qrError && <Text style={styles.errorText}>{qrError}</Text>}
 
       {devices.length > 0 ? (
         <FlatList
@@ -116,6 +169,10 @@ export default function ScanScreen() {
       ) : (
         <Text style={styles.emptyText}>{t('provisioning.scan.noBleDevices')}</Text>
       )}
+
+      <Modal visible={isQrScannerOpen} animationType="slide" onRequestClose={() => setQrScannerOpen(false)}>
+        <QRScan onScanned={handleQrScan} onCancel={() => setQrScannerOpen(false)} />
+      </Modal>
     </View>
   );
 }
@@ -164,6 +221,19 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    borderColor: '#5B6EF5',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  secondaryButtonText: {
+    color: '#5B6EF5',
+    fontSize: 15,
     fontWeight: '600',
   },
   loadingRow: {

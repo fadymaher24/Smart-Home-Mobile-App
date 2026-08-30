@@ -41,6 +41,13 @@ export interface BleDebugSnapshot {
   };
 }
 
+export class BleProvisioningError extends Error {
+  constructor(public readonly code: string, message: string) {
+    super(message);
+    this.name = 'BleProvisioningError';
+  }
+}
+
 type BleWifiPayloadShape = 'envelope' | 'networks-array' | 'array' | 'none' | 'error';
 
 export type SmarteraRemoteAction =
@@ -90,6 +97,10 @@ const DEFAULT_SCAN_TIMEOUT_MS = 7000;
 const DEFAULT_REMOTE_ID = 'smartera-app';
 const PROVISION_ACK_MAX_ATTEMPTS = 3;
 const WIFI_SCAN_READ_MAX_ATTEMPTS = 4;
+const BLE_PROTOCOL_VERSION = 1;
+// A v1 frame remains within the default 20-byte BLE ATT payload even when MTU
+// negotiation is unavailable: P1|index|count| + 11 Base64 characters.
+const BLE_PROVISION_FRAME_CHARS = 11;
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const nextMsgId = () => `msg_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
@@ -370,6 +381,45 @@ const safeDisconnect = async (device: any): Promise<void> => {
   } catch {}
 };
 
+const assertProvisioningProtocol = async (device: any): Promise<void> => {
+  const status = await device.readCharacteristicForService(
+    BLE_SERVICE_UUID,
+    BLE_STATUS_CHAR_UUID
+  );
+  const payload = safeParseBase64Json(status?.value);
+  if (payload?.protocolVersion !== BLE_PROTOCOL_VERSION) {
+    throw new BleProvisioningError(
+      'PROTOCOL_UNSUPPORTED',
+      'This plug firmware is not compatible with the current setup protocol.'
+    );
+  }
+};
+
+const writeProvisionPayload = async (device: any, payload: string): Promise<void> => {
+  if (Platform.OS === 'android' && typeof device.requestMTU === 'function') {
+    try {
+      await device.requestMTU(185);
+    } catch {
+      // The protocol remains fragmented; continue with the negotiated MTU.
+    }
+  }
+
+  const encoded = toBase64(payload);
+  const chunks = encoded.match(new RegExp(`.{1,${BLE_PROVISION_FRAME_CHARS}}`, 'g')) || [];
+  if (chunks.length === 0 || chunks.length > 32) {
+    throw new BleProvisioningError('BLE_PAYLOAD_TOO_LARGE', 'Provisioning data is too large.');
+  }
+
+  for (let index = 0; index < chunks.length; index++) {
+    const frame = `P1|${index}|${chunks.length}|${chunks[index]}`;
+    await device.writeCharacteristicWithResponseForService(
+      BLE_SERVICE_UUID,
+      BLE_PROVISION_CHAR_UUID,
+      toBase64(frame)
+    );
+  }
+};
+
 class BleProvisioningService {
   private debugSnapshot: BleDebugSnapshot = {
     updatedAt: Date.now(),
@@ -409,21 +459,19 @@ class BleProvisioningService {
     let device: any;
     try {
       device = await connectToPlug(serial, input.deviceId);
+      await assertProvisioningProtocol(device);
       const msgId = nextMsgId();
       let ackAttempts = 0;
 
       const payload = {
         msgId,
+        protocolVersion: BLE_PROTOCOL_VERSION,
         ssid: input.ssid.trim(),
         password: input.password,
         token: input.token || '',
       };
 
-      await device.writeCharacteristicWithResponseForService(
-        BLE_SERVICE_UUID,
-        BLE_PROVISION_CHAR_UUID,
-        toBase64(JSON.stringify(payload))
-      );
+      await writeProvisionPayload(device, JSON.stringify(payload));
 
       let ackMatched = false;
       for (let attempt = 0; attempt < PROVISION_ACK_MAX_ATTEMPTS; attempt++) {
@@ -437,7 +485,10 @@ class BleProvisioningService {
           const parsed = JSON.parse(fromBase64(ack.value));
           if (parsed?.type === 'provision_ack' && parsed?.msgId === msgId) {
             if (!parsed.ok) {
-              throw new Error(parsed?.message || 'Device rejected credentials.');
+              throw new BleProvisioningError(
+                parsed?.errorCode || 'CREDENTIALS_REJECTED',
+                parsed?.message || 'Device rejected credentials.'
+              );
             }
             ackMatched = true;
             break;
@@ -514,6 +565,7 @@ class BleProvisioningService {
     let device: any;
     try {
       device = await connectToPlug(serial, deviceId);
+      await assertProvisioningProtocol(device);
 
       const msgId = nextMsgId();
 
@@ -641,6 +693,9 @@ class BleProvisioningService {
 
       return list;
     } catch (error: any) {
+      if (error instanceof BleProvisioningError) {
+        throw error;
+      }
       const normalizedError = error?.message?.toLowerCase?.().includes('operation was rejected')
         ? 'wifi_scan_not_supported_on_firmware'
         : (error?.message || 'wifi_scan_error');

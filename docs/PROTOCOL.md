@@ -17,9 +17,10 @@ claim state must be updated in all four components.
    atomically consumes the unexpired session before assigning the plug.
 5. The backend publishes a retained `claim_result` with a newly issued runtime
    MQTT credential on the plug's bootstrap-authenticated config topic. The
-   plug persists that credential and acknowledges its credential ID; the backend
-   clears the retained response, then the plug clears the claim token and
-   reconnects before it marks provisioning complete.
+   plug persists it and reconnects with the new credential. Only that
+   authenticated reconnection clears the claim token and acknowledges the
+   credential ID, allowing the backend to activate the credential, mark the
+   session claimed, and clear the retained response.
 6. The app waits for an authenticated Socket.IO provisioning event or polls the
    authenticated session endpoint, then applies the device name and room.
 
@@ -30,11 +31,44 @@ the supported flow requires a native BLE build.
 The provisioning token is short lived and single use. It is a temporary
 bootstrap credential only and must never be stored as, or reused as, the
 long-lived MQTT password. Runtime MQTT credentials are individually issued,
-rotatable, revocable, and delivered only on the bootstrap connection.
+rotatable, and revocable. Initial delivery uses the bootstrap connection; a
+rotation is delivered only to the existing device-scoped runtime session while
+its prior credential remains valid until the replacement has reconnected and
+acknowledged its credential ID.
 
 ESP32 is the provisionable smart-plug target. ESP8266 has no BLE radio, so its
 build remains available for already provisioned/bench hardware but cannot enter
 the mobile onboarding flow.
+
+### BLE provisioning transport v1
+
+The app reads `protocolVersion` from the BLE status characteristic and rejects
+anything other than version `1`. Provisioning JSON also carries
+`protocolVersion: 1`. It is Base64 encoded and sent in ordered frames on the
+provisioning characteristic:
+
+```text
+P1|<zero-based-index>|<frame-count>|<base64-chunk>
+```
+
+Chunks are limited so every frame fits the default 20-byte ATT payload; an MTU
+request is only an optimization. Firmware accepts at most 32 ordered frames and
+512 encoded bytes, resets partial data on disconnect or sequence error, and
+decodes only after every frame arrives. ACKs include the protocol version and a
+stable error code.
+
+The QR label currently narrows discovery to the exact 12-hex-digit `SP-` serial,
+and the physical button opens the 120-second pairing window. This is proximity
+and physical-confirmation protection, not cryptographic proof of possession.
+Production challenge-response remains blocked until manufacturing provisions a
+random per-unit secret or asymmetric device key and prints a non-secret proof
+reference on the unit label. The MAC-derived verification code is not suitable
+for that role.
+
+Wi-Fi changes are staged in RAM while the last persisted network remains the
+rollback target. Firmware commits the new SSID only after reconnecting to MQTT
+with the delivered runtime credential and publishing its credential ACK. Wi-Fi,
+MQTT, claim, and timeout failures restore the previous network.
 
 ## MQTT namespace
 
@@ -80,6 +114,26 @@ accepted only after receiving a matching message on the plug's `acks` topic:
 API control responses are pending (`202`) until reported telemetry confirms the
 new relay state. The backend must not overwrite reported state when it merely
 publishes a desired state.
+
+## Smart-plug configuration v1
+
+The current v1 configuration contract supports only `autoOffEnabled` and
+`autoOffDelaySeconds` (1–86,400). Owners update it with an expected desired
+version; the backend publishes the next retained desired version to
+`devices/{deviceId}/config/desired`. Firmware rejects unknown fields, invalid
+types, an unsupported schema, corrupt stored configuration, and stale versions.
+It persists valid settings with a checksum before acknowledging `applied` on
+`devices/{deviceId}/config/ack`.
+
+## Smart-plug metering quality and energy counter
+
+`devices/<serial>/telemetry` includes `measurementQuality`. Current hardware
+reports `estimated`: the ACS712/default-voltage implementation is not a
+calibrated electricity meter and must not be used for billing. The accumulated
+`energyWh` counter is checksum-protected and retained in ESP32 NVS at most once
+per five minutes; it is restored after a reboot. A metering-IC driver and
+manufacturing calibration flow are required before firmware may report
+`calibrated`.
 
 ## Safety and release gates
 
