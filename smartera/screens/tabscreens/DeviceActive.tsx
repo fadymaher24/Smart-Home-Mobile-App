@@ -14,13 +14,15 @@ import {
   Animated,
   Pressable,
   Platform,
+  Switch,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { useTheme } from "../../context/ThemeContext";
 import { Colors } from "../../utils/colors";
 import { useDevices, useRealtimeConnection, useRooms } from "../../hooks/useDeviceData";
-import { Device as ServiceDevice } from "../../services/deviceService";
+import { Device as ServiceDevice, DeviceShadow, deviceService, SmartPlugSettings } from "../../services/deviceService";
+import { useAuth } from "../../context/AuthContext";
 import { useBleProvisioning } from "../../hooks/useBleProvisioning";
 import { MaterialCommunityIcons, Ionicons, Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -259,6 +261,7 @@ const DeviceDetailsModal = ({
   rooms: Room[];
 }) => {
   const { t } = useTranslation();
+  const { token } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const [controlling, setControlling] = useState(false);
@@ -266,6 +269,10 @@ const DeviceDetailsModal = ({
   const [editName, setEditName] = useState('');
   const [editRoomId, setEditRoomId] = useState<number | null>(null);
   const [remoteId, setRemoteId] = useState('wireless-switch-1');
+  const [shadow, setShadow] = useState<DeviceShadow | null>(null);
+  const [plugSettings, setPlugSettings] = useState<SmartPlugSettings>({});
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
   const lastControlTime = useRef(0);
   const {
     isSupported: bleSupported,
@@ -317,6 +324,79 @@ const DeviceDetailsModal = ({
     setEditRoomId(device.roomId ?? null);
   }, [visible, device?.id, device?.name, device?.roomId]);
 
+  useEffect(() => {
+    if (!visible || !isSmartPlug || !device || !token) return;
+    let requestIsCurrent = true;
+    setShadow(null);
+    setPlugSettings(normalizePlugSettings({}));
+    setLoadingConfig(true);
+    deviceService.getDeviceShadow(device.id, token)
+      .then(response => {
+        if (!requestIsCurrent) return;
+        setShadow(response.shadow);
+        setPlugSettings(normalizePlugSettings(response.shadow.desired.settings));
+      })
+      .catch(error => {
+        if (requestIsCurrent) Alert.alert(t('deviceConfig.loadFailedTitle'), error?.message || t('deviceConfig.loadFailedBody'));
+      })
+      .finally(() => {
+        if (requestIsCurrent) setLoadingConfig(false);
+      });
+    return () => { requestIsCurrent = false; };
+  }, [visible, isSmartPlug, device?.id, token, t]);
+
+  useEffect(() => {
+    if (!visible || shadow?.deliveryState !== 'pending' || !device || !token) return;
+    let requestIsCurrent = true;
+    const timer = setInterval(() => {
+      deviceService.getDeviceShadow(device.id, token)
+        .then(response => {
+          if (requestIsCurrent) setShadow(response.shadow);
+        })
+        .catch(error => console.warn('Unable to refresh plug configuration state:', error));
+    }, 3000);
+    return () => {
+      requestIsCurrent = false;
+      clearInterval(timer);
+    };
+  }, [visible, shadow?.deliveryState, device?.id, token]);
+
+  const savePlugConfiguration = async () => {
+    if (!device || !token || !shadow) return;
+    const interval = plugSettings.reportingIntervalSeconds ?? 30;
+    const autoOffDelay = plugSettings.autoOffDelaySeconds ?? 1800;
+    const timeZoneRule = plugSettings.timeZoneRule ?? 'UTC0';
+    const invalidSchedule = (plugSettings.weeklySchedule ?? []).some(entry => entry.days < 1);
+    if (interval < 10 || interval > 3600 || autoOffDelay < 1 || autoOffDelay > 86400 ||
+        !/^[A-Za-z0-9,_+./:-]{1,64}$/.test(timeZoneRule) || invalidSchedule) {
+      Alert.alert(t('deviceConfig.invalidTitle'), t('deviceConfig.invalidBody'));
+      return;
+    }
+    setSavingConfig(true);
+    try {
+      const response = await deviceService.updateDeviceShadow(device.id, shadow.desired.version, plugSettings, token);
+      setShadow(response.shadow);
+      setPlugSettings(normalizePlugSettings(response.shadow.desired.settings));
+      Alert.alert(t('deviceConfig.queuedTitle'), t('deviceConfig.queuedBody'));
+    } catch (error: any) {
+      Alert.alert(t('deviceConfig.saveFailedTitle'), error?.message || t('deviceConfig.saveFailedBody'));
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const updateScheduleEntry = (
+    index: number,
+    update: Partial<{ days: number; minuteOfDay: number; relayOn: boolean }>,
+  ) => {
+    setPlugSettings(current => ({
+      ...current,
+      weeklySchedule: (current.weeklySchedule ?? []).map((entry, entryIndex) =>
+        entryIndex === index ? { ...entry, ...update } : entry
+      ),
+    }));
+  };
+
   const handleSmarteraRemoteAction = async (
     action: 'pair' | 'unpair' | 'relay_toggle' | 'gateway_enable' | 'gateway_disable'
   ) => {
@@ -340,7 +420,9 @@ const DeviceDetailsModal = ({
       });
 
       await refreshGatewayStatus(device.serialNumber);
-    } catch {}
+    } catch (error) {
+      console.warn('Smartera-Remote action failed:', error);
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -587,10 +669,137 @@ const DeviceDetailsModal = ({
                     <Text style={[styles.telemetryUnit, { color: isDark ? '#888' : '#666' }]}>kWh</Text>
                   </View>
                 </View>
+                <Text style={[styles.remoteSubtitle, { color: device.lastTelemetry.measurementQuality === 'calibrated' ? Colors.success : Colors.warning }]}>
+                  {device.lastTelemetry.measurementQuality === 'calibrated'
+                    ? t('deviceConfig.calibratedMetering')
+                    : t('deviceConfig.estimatedMetering')}
+                </Text>
               </View>
             )}
 
             {/* Device Info */}
+            {isSmartPlug && (
+              <View style={styles.detailsSection}>
+                <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#333' }]}>{t('deviceConfig.title')}</Text>
+                {loadingConfig ? (
+                  <ActivityIndicator color={Colors.primary} />
+                ) : shadow ? (
+                  <View style={[styles.editCard, { backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5' }]}>
+                    <View style={styles.configStatusRow}>
+                      <Text style={{ color: isDark ? '#ddd' : '#333' }}>
+                        {t(`deviceConfig.${shadow.deliveryState}`)}
+                      </Text>
+                      {(shadow.deliveryState === 'rejected' || shadow.deliveryState === 'stale') && shadow.lastResult?.error && (
+                        <Text style={{ color: Colors.error }}>{shadow.lastResult.error}</Text>
+                      )}
+                    </View>
+                    <View style={styles.configSwitchRow}>
+                      <Text style={[styles.infoLabel, { color: isDark ? '#ddd' : '#333' }]}>{t('deviceConfig.childLock')}</Text>
+                      <Switch value={plugSettings.childLock ?? false} onValueChange={childLock => setPlugSettings(current => ({ ...current, childLock }))} />
+                    </View>
+                    {plugSettings.autoOffEnabled && (
+                      <>
+                        <Text style={[styles.editRoomLabel, { color: isDark ? '#aaa' : '#666' }]}>{t('deviceConfig.autoOffDelay')}</Text>
+                        <TextInput
+                          style={[styles.configNumberInput, { color: isDark ? '#fff' : '#333', backgroundColor: isDark ? '#1f1f1f' : '#fff' }]}
+                          keyboardType="number-pad"
+                          value={String(plugSettings.autoOffDelaySeconds ?? 1800)}
+                          onChangeText={value => setPlugSettings(current => ({ ...current, autoOffDelaySeconds: Number(value) || 0 }))}
+                        />
+                      </>
+                    )}
+                    <View style={styles.configSwitchRow}>
+                      <Text style={[styles.infoLabel, { color: isDark ? '#ddd' : '#333' }]}>{t('deviceConfig.led')}</Text>
+                      <Switch value={(plugSettings.ledMode ?? 'relay') === 'relay'} onValueChange={enabled => setPlugSettings(current => ({ ...current, ledMode: enabled ? 'relay' : 'off' }))} />
+                    </View>
+                    <View style={styles.configSwitchRow}>
+                      <Text style={[styles.infoLabel, { color: isDark ? '#ddd' : '#333' }]}>{t('deviceConfig.autoOff')}</Text>
+                      <Switch value={plugSettings.autoOffEnabled ?? false} onValueChange={autoOffEnabled => setPlugSettings(current => ({ ...current, autoOffEnabled }))} />
+                    </View>
+                    <Text style={[styles.editRoomLabel, { color: isDark ? '#aaa' : '#666' }]}>{t('deviceConfig.powerOn')}</Text>
+                    <View style={styles.configChoiceRow}>
+                      {(['off', 'on', 'restore'] as const).map(behavior => (
+                        <TouchableOpacity
+                          key={behavior}
+                          style={[styles.editRoomChip, { backgroundColor: (plugSettings.powerOnBehavior ?? 'restore') === behavior ? Colors.primary : (isDark ? '#1f1f1f' : '#fff') }]}
+                          onPress={() => setPlugSettings(current => ({ ...current, powerOnBehavior: behavior }))}
+                        >
+                          <Text style={{ color: (plugSettings.powerOnBehavior ?? 'restore') === behavior ? '#fff' : (isDark ? '#ddd' : '#333') }}>{t(`deviceConfig.${behavior}`)}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <Text style={[styles.editRoomLabel, { color: isDark ? '#aaa' : '#666' }]}>{t('deviceConfig.reportingInterval')}</Text>
+                    <TextInput
+                      style={[styles.configNumberInput, { color: isDark ? '#fff' : '#333', backgroundColor: isDark ? '#1f1f1f' : '#fff' }]}
+                      keyboardType="number-pad"
+                      value={String(plugSettings.reportingIntervalSeconds ?? 30)}
+                      onChangeText={value => setPlugSettings(current => ({ ...current, reportingIntervalSeconds: Number(value) || 0 }))}
+                    />
+                    <Text style={[styles.editRoomLabel, { color: isDark ? '#aaa' : '#666' }]}>{t('deviceConfig.timeZone')}</Text>
+                    <TextInput
+                      style={[styles.configNumberInput, { color: isDark ? '#fff' : '#333', backgroundColor: isDark ? '#1f1f1f' : '#fff' }]}
+                      value={plugSettings.timeZoneRule ?? 'UTC0'}
+                      onChangeText={timeZoneRule => setPlugSettings(current => ({ ...current, timeZoneRule }))}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <View style={styles.scheduleHeader}>
+                      <Text style={[styles.editRoomLabel, { color: isDark ? '#aaa' : '#666' }]}>{t('deviceConfig.schedule')}</Text>
+                      <TouchableOpacity
+                        onPress={() => setPlugSettings(current => ({
+                          ...current,
+                          weeklySchedule: [...(current.weeklySchedule ?? []), { days: 62, minuteOfDay: 480, relayOn: true }],
+                        }))}
+                        disabled={(plugSettings.weeklySchedule?.length ?? 0) >= 16}
+                      >
+                        <Text style={{ color: Colors.primary, fontWeight: '700' }}>{t('deviceConfig.addSchedule')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {(plugSettings.weeklySchedule ?? []).map((entry, index) => (
+                      <View key={`${index}-${entry.minuteOfDay}`} style={[styles.scheduleCard, { backgroundColor: isDark ? '#1f1f1f' : '#fff' }]}>
+                        <View style={styles.scheduleHeader}>
+                          <View style={styles.scheduleTimeControls}>
+                            <TouchableOpacity onPress={() => updateScheduleEntry(index, { minuteOfDay: (entry.minuteOfDay + 1425) % 1440 })}>
+                              <Ionicons name="remove-circle-outline" size={22} color={Colors.primary} />
+                            </TouchableOpacity>
+                            <Text style={[styles.scheduleTimeText, { color: isDark ? '#fff' : '#333' }]}>
+                              {`${Math.floor(entry.minuteOfDay / 60).toString().padStart(2, '0')}:${(entry.minuteOfDay % 60).toString().padStart(2, '0')}`}
+                            </Text>
+                            <TouchableOpacity onPress={() => updateScheduleEntry(index, { minuteOfDay: (entry.minuteOfDay + 15) % 1440 })}>
+                              <Ionicons name="add-circle-outline" size={22} color={Colors.primary} />
+                            </TouchableOpacity>
+                          </View>
+                          <View style={styles.scheduleActionRow}>
+                            <Switch value={entry.relayOn} onValueChange={relayOn => updateScheduleEntry(index, { relayOn })} />
+                            <TouchableOpacity onPress={() => setPlugSettings(current => ({ ...current, weeklySchedule: (current.weeklySchedule ?? []).filter((_, entryIndex) => entryIndex !== index) }))}>
+                              <Ionicons name="trash-outline" size={20} color={Colors.error} />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        <View style={styles.scheduleDays}>
+                          {['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].map((day, dayIndex) => {
+                            const selected = (entry.days & (1 << dayIndex)) !== 0;
+                            return (
+                              <TouchableOpacity
+                                key={day}
+                                style={[styles.scheduleDay, { backgroundColor: selected ? Colors.primary : (isDark ? '#333' : '#eee') }]}
+                                onPress={() => updateScheduleEntry(index, { days: entry.days ^ (1 << dayIndex) })}
+                              >
+                                <Text style={{ color: selected ? '#fff' : (isDark ? '#ddd' : '#555'), fontSize: 11 }}>{t(`deviceConfig.days.${day}`)}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    ))}
+                    <TouchableOpacity style={[styles.editSaveButton, { backgroundColor: Colors.primary }]} onPress={savePlugConfiguration} disabled={savingConfig}>
+                      {savingConfig ? <ActivityIndicator color="#fff" /> : <Text style={styles.editSaveButtonText}>{t('deviceConfig.save')}</Text>}
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </View>
+            )}
+
             <View style={styles.detailsSection}>
               <Text style={[styles.sectionTitle, { color: isDark ? '#fff' : '#333' }]}>Device Info</Text>
               <View style={[styles.infoCard, { backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5' }]}>
@@ -746,6 +955,20 @@ const DeviceDetailsModal = ({
     </Modal>
   );
 };
+
+function normalizePlugSettings(settings: SmartPlugSettings): SmartPlugSettings {
+  return {
+    autoOffEnabled: false,
+    autoOffDelaySeconds: 1800,
+    powerOnBehavior: 'restore',
+    childLock: false,
+    ledMode: 'relay',
+    reportingIntervalSeconds: 30,
+    weeklySchedule: [],
+    timeZoneRule: 'UTC0',
+    ...settings,
+  };
+}
 
 // Main Component
 export default function DeviceActive() {
@@ -1651,6 +1874,64 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     paddingVertical: 0,
+  },
+  configStatusRow: {
+    gap: 4,
+    marginBottom: 12,
+  },
+  configSwitchRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 48,
+  },
+  configChoiceRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  configNumberInput: {
+    borderRadius: 10,
+    marginBottom: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  scheduleHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  scheduleCard: {
+    borderRadius: 10,
+    marginBottom: 10,
+    padding: 10,
+  },
+  scheduleTimeControls: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  scheduleTimeText: {
+    fontSize: 16,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '700',
+  },
+  scheduleActionRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  scheduleDays: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  scheduleDay: {
+    alignItems: 'center',
+    borderRadius: 16,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
   },
   editRoomLabel: {
     fontSize: 12,

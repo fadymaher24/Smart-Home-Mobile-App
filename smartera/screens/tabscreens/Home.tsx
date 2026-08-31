@@ -308,9 +308,16 @@ export default function Home() {
   }, [controlDevice, lastToggle]);
 
   // Extract cost data safely
-  const todayCost = typeof powerStats?.cost === 'object' 
-    ? powerStats.cost.today 
-    : (powerStats?.cost || 0);
+  const costSummary = typeof powerStats?.cost === 'object' ? powerStats.cost : null;
+  const todayCost = costSummary?.today ?? null;
+  const costCurrency = costSummary?.currency ?? null;
+  const hasConfiguredTariff = Boolean(costSummary?.configured && costCurrency && costSummary.rate !== null);
+  let todayCostLabel = 'Set your electricity tariff to estimate cost';
+  if (hasConfiguredTariff) {
+    todayCostLabel = todayCost === null
+      ? 'Cost is unavailable for this period'
+      : `~${costCurrency} ${todayCost.toFixed(2)} today`;
+  }
 
   const userName = user?.name?.split(' ')[0] || 'User';
 
@@ -352,7 +359,7 @@ export default function Home() {
           </View>
           <Text style={styles.powerLabel}>Current Power Usage</Text>
           <Text style={[styles.powerCost, { color: Colors.success }]}>
-            ~${todayCost.toFixed(2)} today
+            {todayCostLabel}
           </Text>
         </View>
       </LinearGradient>

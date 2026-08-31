@@ -117,12 +117,16 @@ publishes a desired state.
 
 ## Smart-plug configuration v1
 
-The current v1 configuration contract supports only `autoOffEnabled` and
-`autoOffDelaySeconds` (1–86,400). Owners update it with an expected desired
-version; the backend publishes the next retained desired version to
+The current v1 configuration contract supports `autoOffEnabled`,
+`autoOffDelaySeconds` (1–86,400), `powerOnBehavior` (`off`, `on`, or `restore`),
+`childLock`, `ledMode` (`relay` or `off`), `reportingIntervalSeconds` (10–3,600),
+up to 16 non-conflicting `weeklySchedule` entries, and a POSIX `timeZoneRule`.
+Owners update it with an expected desired version; the backend stores the
+shadow update and delivery payload transactionally, then publishes the retained desired version to
 `devices/{deviceId}/config/desired`. Firmware rejects unknown fields, invalid
 types, an unsupported schema, corrupt stored configuration, and stale versions.
-It persists valid settings with a checksum before acknowledging `applied` on
+It persists valid settings, schedule, and timezone as one checksummed version
+before acknowledging `applied` on
 `devices/{deviceId}/config/ack`.
 
 ## Smart-plug metering quality and energy counter

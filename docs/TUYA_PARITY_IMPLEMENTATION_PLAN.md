@@ -1106,12 +1106,13 @@ Exit criteria:
 
 Objective: replace hardcoded/ad hoc settings with a typed, versioned contract.
 
-Started implementation (2026-08-29): schema-v1 desired/reported shadow is
-persisted and exposed through owner-scoped APIs. The initial ESP32 contract is
-limited to real auto-off behavior: desired values are validated, checksum-backed
-in device storage, versioned, applied idempotently, and acknowledged after the
-plug persists them. Other smart-plug settings remain future schema work, not
-partially supported controls.
+Implementation update (2026-08-30): schema-v1 desired/reported shadow is
+persisted and exposed through owner-scoped APIs. Auto-off, boot behavior, child
+lock, LED behavior, reporting interval, timezone, and weekly schedules are
+validated by both backend and ESP32 firmware, stored as one checksummed version,
+and acknowledged after persistence. Desired delivery now uses a transactional
+database outbox; rejected and stale results remain visible to the app. A dynamic
+product-schema registry and certified hardware ceilings remain open work.
 
 Work packages:
 
@@ -1228,6 +1229,12 @@ Exit criteria:
 ### Phase 5: Local Automation and Complete Plug Configuration
 
 Objective: provide the expected daily smart-plug configuration experience.
+
+Implementation update (2026-08-30): ESP32 weekly scheduling, POSIX timezone,
+power-on behavior, child lock, LED mode, reporting interval, tariff persistence,
+counter-reset-aware usage, and the core mobile configuration/tariff controls are
+implemented. Countdown UI, schedule editing UI, historical multi-tariff cost,
+calibrated metering, and hardware/DST interruption tests remain open gates.
 
 Work packages:
 

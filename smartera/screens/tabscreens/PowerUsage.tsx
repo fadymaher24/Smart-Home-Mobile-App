@@ -234,25 +234,23 @@ export default function PowerUsage() {
       .sort((a, b) => b.power - a.power);
   }, [devices]);
 
-  // Extract cost data safely
   const costData = useMemo(() => {
-    if (typeof powerStats?.cost === 'object' && powerStats.cost) {
-      return {
-        today: powerStats.cost.today || 0,
-        weekly: powerStats.cost.weekly || 0,
-        monthly: powerStats.cost.monthly || 0,
-        rate: powerStats.cost.rate || 0.12,
-        currency: powerStats.cost.currency || 'USD',
-      };
+    const cost = typeof powerStats?.cost === 'object' ? powerStats.cost : null;
+    if (!cost?.configured || !cost.currency || cost.rate === null) {
+      return null;
     }
     return {
-      today: 0,
-      weekly: 0,
-      monthly: 0,
-      rate: 0.12,
-      currency: 'USD',
+      today: cost.today,
+      weekly: cost.weekly,
+      monthly: cost.monthly,
+      currency: cost.currency,
+      rate: cost.rate,
     };
   }, [powerStats]);
+
+  const formatCost = (value: number | null): string => {
+    return costData && value !== null ? `${costData.currency} ${value.toFixed(2)}` : '—';
+  };
 
   // Energy stats
   const energyStats = useMemo(() => {
@@ -269,6 +267,7 @@ export default function PowerUsage() {
       monthlyUsage,
       dailyAverage,
       currentPower,
+      projectedMonthlyUsage: dailyAverage * new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate(),
     };
   }, [powerStats, currentPower]);
 
@@ -402,17 +401,17 @@ export default function PowerUsage() {
         <View style={styles.costRow}>
           <View style={styles.costItem}>
             <Text style={styles.costLabel}>Today</Text>
-            <Text style={styles.costValue}>${costData.today.toFixed(2)}</Text>
+            <Text style={styles.costValue}>{formatCost(costData?.today ?? null)}</Text>
           </View>
           <View style={styles.costDivider} />
           <View style={styles.costItem}>
             <Text style={styles.costLabel}>This Week</Text>
-            <Text style={styles.costValue}>${costData.weekly.toFixed(2)}</Text>
+            <Text style={styles.costValue}>{formatCost(costData?.weekly ?? null)}</Text>
           </View>
           <View style={styles.costDivider} />
           <View style={styles.costItem}>
             <Text style={styles.costLabel}>This Month</Text>
-            <Text style={styles.costValue}>${costData.monthly.toFixed(2)}</Text>
+            <Text style={styles.costValue}>{formatCost(costData?.monthly ?? null)}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -580,8 +579,9 @@ export default function PowerUsage() {
             <View style={styles.tipContent}>
               <Text style={[styles.tipTitle, { color: themeColors.text }]}>Cost Projection</Text>
               <Text style={[styles.tipText, { color: themeColors.textSecondary }]}>
-                At current usage, your estimated monthly bill is ${(costData.monthly * 4.3).toFixed(2)} 
-                (rate: ${costData.rate}/kWh)
+                {costData
+                  ? `At current usage, your estimated monthly bill is ${costData.currency} ${(energyStats.projectedMonthlyUsage * costData.rate).toFixed(2)} (rate: ${costData.currency} ${costData.rate}/kWh)`
+                  : 'Set your electricity tariff to enable cost projections.'}
               </Text>
             </View>
           </View>

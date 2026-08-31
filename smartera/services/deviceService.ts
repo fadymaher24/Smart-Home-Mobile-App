@@ -18,6 +18,7 @@ export interface DeviceTelemetry {
   uptime?: number;
   freeHeap?: number;
   rssi?: number;
+  measurementQuality?: 'estimated' | 'calibrated';
 }
 
 export interface Device {
@@ -53,16 +54,51 @@ export interface PowerUsageStats {
   activeDevices: number;
   onlineDevices: number;
   cost?: {
-    today: number;
-    weekly: number;
-    monthly: number;
-    currency: string;
-    rate: number;
+    today: number | null;
+    weekly: number | null;
+    monthly: number | null;
+    currency: string | null;
+    rate: number | null;
+    configured: boolean;
   };
+}
+
+export interface SmartPlugSettings {
+  autoOffEnabled?: boolean;
+  autoOffDelaySeconds?: number;
+  powerOnBehavior?: 'off' | 'on' | 'restore';
+  childLock?: boolean;
+  ledMode?: 'relay' | 'off';
+  reportingIntervalSeconds?: number;
+  weeklySchedule?: { days: number; minuteOfDay: number; relayOn: boolean }[];
+  timeZoneRule?: string;
+}
+
+export interface DeviceShadow {
+  schemaVersion: number;
+  desired: { version: number; settings: SmartPlugSettings };
+  reported: { version: number; settings: SmartPlugSettings };
+  pending: boolean;
+  deliveryState: 'pending' | 'synced' | 'rejected' | 'stale';
+  lastResult: { status: 'applied' | 'rejected' | 'stale'; version: number; error: string | null } | null;
+  updatedAt: string;
 }
 
 // Device API calls - Updated to match backend API
 export const deviceService = {
+  async getDeviceShadow(deviceId: number, token: string): Promise<{ shadow: DeviceShadow }> {
+    return apiRequest(`/device/${deviceId}/config`, 'GET', undefined, token);
+  },
+
+  async updateDeviceShadow(
+    deviceId: number,
+    expectedVersion: number,
+    settings: SmartPlugSettings,
+    token: string,
+  ): Promise<{ shadow: DeviceShadow }> {
+    return apiRequest(`/device/${deviceId}/config`, 'PATCH', { expectedVersion, settings }, token);
+  },
+
   // Get all devices for the user (GET /api/device)
   async getDevices(token: string): Promise<Device[]> {
     const response = await apiRequest('/device', 'GET', undefined, token);
@@ -156,7 +192,7 @@ export const deviceService = {
     labels: string[];
     peakUsage: number;
     avgUsage: number;
-    cost: number;
+    cost: number | null;
   }> {
     return apiRequest('/power-usage/weekly', 'GET', undefined, token);
   },
@@ -165,9 +201,20 @@ export const deviceService = {
     month: string;
     totalUsage: number;
     weeklyData: number[];
-    cost: number;
+    cost: number | null;
   }> {
     return apiRequest('/power-usage/monthly', 'GET', undefined, token);
+  },
+
+  async getCurrentTariff(token: string): Promise<{ tariff: { currency: string; pricePerKwh: number } | null }> {
+    return apiRequest('/power-usage/tariff', 'GET', undefined, token);
+  },
+
+  async setCurrentTariff(
+    data: { currency: string; pricePerKwh: number; effectiveFrom?: string },
+    token: string,
+  ): Promise<{ tariff: { currency: string; pricePerKwh: number; effectiveFrom: string } }> {
+    return apiRequest('/power-usage/tariff', 'PUT', data, token);
   },
 
   // Get daily power usage (GET /api/power-usage/daily)
