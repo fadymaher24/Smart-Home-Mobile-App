@@ -52,6 +52,7 @@ __tests__/*
 !__tests__/context/
 __tests__/context/*
 !__tests__/context/AuthContext.test.tsx
+!__tests__/context/ThemeContext.test.tsx
 !__tests__/hooks/
 __tests__/hooks/*
 !__tests__/hooks/useDeviceData.test.tsx

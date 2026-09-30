@@ -5,7 +5,7 @@ import { useColorScheme } from "react-native";
 import { StyleSheet, Text, View } from "react-native";
 
 export default function StackMe() {
-  const colorScheme = useColorScheme() ?? "dark";
+  const colorScheme = useColorScheme() === "light" ? "light" : "dark";
   return (
     <View style={styles(colorScheme).container}>
       <Text style={{ color: colorScheme === "dark" ? "#fff" : "#000" }}>

@@ -93,8 +93,8 @@ Smart-Home-Mobile-App/
 
 ## Usage
 
-1. Start the development server using `expo start`.
-2. Scan the QR code displayed in the terminal or browser using the Expo Go app on your mobile device.
+1. From `smartera/`, start the development server using `npm start`.
+2. Open the project in a development build on your device. Bluetooth pairing requires a native build and does not run in Expo Go.
 3. Interact with the app to control and monitor your smart home devices.
 
 ## Contributing

@@ -1,9 +1,9 @@
 # 🏠 Smartera - Smart Home Mobile App
 
 <p align="center">
-  <img src="https://img.shields.io/badge/React_Native-0.81.5-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="React Native" />
-  <img src="https://img.shields.io/badge/Expo-54.0-000020?style=for-the-badge&logo=expo&logoColor=white" alt="Expo" />
-  <img src="https://img.shields.io/badge/TypeScript-5.3-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/React_Native-0.86.3-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="React Native" />
+  <img src="https://img.shields.io/badge/Expo-57.0-000020?style=for-the-badge&logo=expo&logoColor=white" alt="Expo" />
+  <img src="https://img.shields.io/badge/TypeScript-6.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Socket.IO-Real--time-010101?style=for-the-badge&logo=socket.io&logoColor=white" alt="Socket.IO" />
 </p>
 
@@ -49,8 +49,8 @@
 
 | Category | Technology |
 |----------|------------|
-| **Framework** | React Native 0.81.5 with Expo SDK 54 |
-| **Language** | TypeScript 5.3 |
+| **Framework** | React Native 0.86.3 with Expo SDK 57 |
+| **Language** | TypeScript 6.0 |
 | **State Management** | React Context API |
 | **Real-time** | Socket.IO Client |
 | **Navigation** | Expo Router (file-based routing) |
@@ -58,15 +58,16 @@
 | **Icons** | @expo/vector-icons (Ionicons, MaterialCommunityIcons, Feather) |
 | **Testing** | Jest with React Native Testing Library |
 
+React and React DOM are pinned to 19.2.8 because the resolved Expo Router server dependency requires that patch. `expo.install.exclude` records this intentional difference from Expo SDK 57's 19.2.3 recommendation.
+
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 22.13+
 - npm or yarn
-- Expo CLI (`npm install -g expo-cli`)
 - iOS Simulator (Mac) or Android Emulator
 
 ### Installation
@@ -84,20 +85,18 @@
 
 3. **Configure the backend**
    
-   Update the API URL in `utils/api.ts`:
-   ```typescript
-   export const API_BASE_URL = 'http://YOUR_BACKEND_IP:3000/api';
-   ```
+   Set `EXPO_PUBLIC_API_URL` in `.env.local` to your backend API URL, for example `http://YOUR_BACKEND_IP:3000/api`.
 
 4. **Start the development server**
    ```bash
-   npx expo start
+   npm start
    ```
 
 5. **Run on your device**
    - Press `a` for Android emulator
    - Press `i` for iOS simulator
-   - Scan the QR code with Expo Go app on your physical device
+   - Install a development build on a physical device, then open it using the QR code. BLE requires this native build.
+   - For iOS device builds, run `npx eas-cli build --platform ios --profile development` (Apple signing required).
 
 ---
 

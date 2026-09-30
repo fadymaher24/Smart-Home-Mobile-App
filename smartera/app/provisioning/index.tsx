@@ -13,17 +13,17 @@ export default function ProvisioningIndex() {
     }
 
     if (state.phase === 'idle' || state.phase === 'instructions' || state.phase === 'error' || state.phase === 'timeout') {
-      router.replace('./scan');
+      router.replace('/provisioning/scan');
     } else if (state.phase === 'ble_scanning' || state.phase === 'ble_device_found' || state.phase === 'ble_connecting') {
-      router.replace('./scan');
+      router.replace('/provisioning/scan');
     } else if (state.phase === 'ble_connected' || state.phase === 'wifi_scan_requested' || state.phase === 'wifi_scan_results') {
-      router.replace('./connect');
+      router.replace('/provisioning/connect');
     } else if (state.phase === 'credentials_sent' || state.phase === 'wifi_connecting' || state.phase === 'cloud_verifying') {
-      router.replace('./progress');
+      router.replace('/provisioning/progress');
     } else if (state.phase === 'claimed' || state.phase === 'complete') {
-      router.replace('./success');
+      router.replace('/provisioning/success');
     } else {
-      router.replace('./connect');
+      router.replace('/provisioning/connect');
     }
   }, [router, state.phase]);
 

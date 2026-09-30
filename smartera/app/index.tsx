@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -30,10 +30,10 @@ export default function Welcome() {
   const isDark = colorScheme === "dark";
   
   // Animations
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
-  const iconFloat = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useState(() => new Animated.Value(0))[0];
+  const slideAnim = useState(() => new Animated.Value(50))[0];
+  const scaleAnim = useState(() => new Animated.Value(0.8))[0];
+  const iconFloat = useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     // Entry animations

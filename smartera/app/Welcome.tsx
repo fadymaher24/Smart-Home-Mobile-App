@@ -1,6 +1,6 @@
 import React from "react";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { createBottomTabNavigator } from "expo-router/js-tabs";
+import { createStackNavigator } from "expo-router/js-stack";
 
 import Feather from "@expo/vector-icons/Feather";
 import { View, StyleSheet, Text } from "react-native";
@@ -15,7 +15,7 @@ import DevicesActive from "@/screens/tabscreens/DeviceActive";
 import PowerUsage from "../screens/tabscreens/PowerUsage";
 import LoginScreen from "../screens/LoginScreen";
 
-const HomeStack = createNativeStackNavigator();
+const HomeStack = createStackNavigator();
 
 function HomeStackScreen() {
   return (
