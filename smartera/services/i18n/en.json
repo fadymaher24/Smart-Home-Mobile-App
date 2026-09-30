@@ -141,6 +141,28 @@
       "submit": "Add Device",
       "pendingTitle": "Waiting for Device",
       "pendingHint": "Power on your device. It will automatically connect using these credentials."
+    },
+    "wifiSetup": {
+      "entry": "Set up with Wi-Fi (Expo Go)",
+      "title": "Set up over Wi-Fi",
+      "serial": "Plug serial number",
+      "serialHint": "Scan the QR label or type its serial number.",
+      "scan": "Scan QR label",
+      "start": "Create setup token",
+      "step1": "Connect the plug to USB. In the 115200 serial monitor, type wifi_setup and press Enter.",
+      "step2": "On your phone, join the Smartera-Setup Wi-Fi network using the password shown in the serial monitor.",
+      "step3": "Open http://192.168.4.1 in your phone browser. Enter this one-time token and your 2.4 GHz home Wi-Fi details.",
+      "step4": "After the plug closes its setup network, reconnect your phone to the internet and return here.",
+      "token": "One-time token",
+      "openPortal": "Open plug setup page",
+      "verify": "Verify device setup",
+      "waiting": "Checking cloud registration…",
+      "pending": "The plug has not registered yet. Check its serial log and try Verify again.",
+      "failed": "Setup failed: {{reason}}",
+      "wrongDevice": "A different plug claimed this token. Stop and restart setup.",
+      "invalidSerial": "Enter a serial like SP-B0A7322BCC90.",
+      "expired": "This setup token expired. Create a new one.",
+      "onlineFirst": "Connect your phone to the internet before creating a setup token."
     }
   },
   "deviceConfig": {

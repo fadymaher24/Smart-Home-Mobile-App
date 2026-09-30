@@ -116,6 +116,13 @@ export default function ScanScreen() {
         >
           <Text style={styles.primaryButtonText}>{t('provisioning.scan.instructionsCta')}</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => router.push({ pathname: '/provisioning/wifi-setup', params: targetSerial ? { serial: targetSerial } : {} } as any)}
+          accessibilityRole="button"
+        >
+          <Text style={styles.secondaryButtonText}>{t('provisioning.wifiSetup.entry')}</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -146,6 +153,14 @@ export default function ScanScreen() {
             ? t('provisioning.scan.qrMatched', { serial: targetSerial })
             : t('provisioning.scan.scanQr')}
         </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.secondaryButton}
+        onPress={() => router.push({ pathname: '/provisioning/wifi-setup', params: targetSerial ? { serial: targetSerial } : {} } as any)}
+        accessibilityRole="button"
+      >
+        <Text style={styles.secondaryButtonText}>{t('provisioning.wifiSetup.entry')}</Text>
       </TouchableOpacity>
 
       {(isDiscovering || isLoading) && (

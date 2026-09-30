@@ -70,7 +70,7 @@ export interface ProvisioningState {
 }
 
 type ProvisioningAction =
-  | { type: 'START_SESSION'; payload: { sessionId: string; token: string } }
+  | { type: 'START_SESSION'; payload: { sessionId: string; token: string; expiresAt?: number } }
   | { type: 'SET_PHASE'; payload: ProvisioningPhase }
   | { type: 'SELECT_DEVICE'; payload: DiscoveredDevice }
   | { type: 'SET_WIFI'; payload: string }
@@ -109,7 +109,7 @@ function provisioningReducer(state: ProvisioningState, action: ProvisioningActio
         token: action.payload.token,
         phase: 'instructions',
         startedAt: Date.now(),
-        deadlineAt: Date.now() + GLOBAL_TIMEOUT_MS,
+        deadlineAt: action.payload.expiresAt ?? Date.now() + GLOBAL_TIMEOUT_MS,
         lastUpdated: Date.now(),
       };
     case 'SET_PHASE':
@@ -171,7 +171,7 @@ function provisioningReducer(state: ProvisioningState, action: ProvisioningActio
 
 interface ProvisioningContextValue {
   state: ProvisioningState;
-  startSession: (sessionId: string, token: string) => void;
+  startSession: (sessionId: string, token: string, expiresAt?: number) => void;
   setPhase: (phase: ProvisioningPhase) => void;
   selectDevice: (device: DiscoveredDevice) => void;
   setWifi: (ssid: string) => void;
@@ -230,11 +230,11 @@ export function ProvisioningProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const startSession = (sessionId: string, token: string) => {
+  const startSession = (sessionId: string, token: string, expiresAt?: number) => {
     void SecureStore.setItemAsync(TOKEN_KEY, token, {
       keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
     });
-    dispatch({ type: 'START_SESSION', payload: { sessionId, token } });
+    dispatch({ type: 'START_SESSION', payload: { sessionId, token, expiresAt } });
   };
 
   const setPhase = (phase: ProvisioningPhase) => {
